@@ -8,9 +8,9 @@ Input files
   2) a) starting values for gbsPa and gm for CAsat model
      b) starting values for gbsPa and gm for CAlim model
      c) starting values for gbsPa and gm for CA+PPDKlim model
-  3)Script for the 
+  3)Script for the combined enzyme and discrimination limited model
   4)Script for Figures and Statistical Analysis
             5 Figures main text
             3 Supplementary figures
             
-            Statistical Analyisis
+
