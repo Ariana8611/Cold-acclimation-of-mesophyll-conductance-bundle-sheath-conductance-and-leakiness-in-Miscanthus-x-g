@@ -1,0 +1,1090 @@
+---
+title: "Cold acclimation of mesophyll conductance and leakiness in Miscanthus x giganteus"
+author: "Erika Serrano"
+date: "12/20/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,message = FALSE )
+```
+
+Loading packages
+```{r, loading packages, message=FALSE, warning=FALSE}
+
+options(java.parameters = "-Xmx4g" )
+library(XLConnect)
+library(doBy)
+library(ez)
+library(reshape2)
+library(scales)
+library(plyr)
+library(minpack.lm)
+library(lmerTest)
+library(nlWaldTest)
+library(ggplot2)
+library(mice)
+
+```
+
+
+Loading the results from the script "Misc combined C4 and discrimination model.Rmd"
+```{r, loading data}
+gmsat0<-read.csv("results_gmsat0.csv", head=TRUE)
+gmCAlim0<-read.csv("results_gmCAlim.csv", head=TRUE)
+gmPPDKlim0<-read.csv("results_gmCA_PPDKlim.csv", head=TRUE)
+```
+
+```{r, functions, echo=FALSE}
+se<- function(x, ...) {
+  se <- sd(x, ...)/sqrt(sum(!is.na(x)))
+  return(se)
+}
+
+
+out = function(x,phi) {
+  
+  # Get Q1 and Q3
+  qnt = quantile(x$phi, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  iqt = 1.5 * IQR(x$phi)
+  
+  
+  # Apply on a copy of the original data
+ x[x$phi < (qnt[1] - iqt )|x$phi > (qnt[2] + iqt),] = NA
+  
+
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers<-function(x,phi){
+  #Add a unique identifier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out(x,phi))
+  return(x)
+}
+
+
+
+out_gbsPa= function(x,gbsPa) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$gbsPa, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$gbsPa)
+  
+  
+  # Apply on a copy ogbsPa the original data
+  
+  x[x$gbsPa < (qnt[1] - iqt )|x$gbsPa > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_gbsPa<-function(x,gbsPa){
+  #Add a unique identigbsPaier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_gbsPa(x,gbsPa))
+  return(x)
+}
+
+out_gmPa = function(x,gmPa) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$gmPa, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$gmPa)
+  
+  
+  # Apply on a copy ogmPa the original data
+  
+  x[x$gmPa < (qnt[1] - iqt )|x$gmPa > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_gmPa<-function(x,gmPa){
+  #Add a unique identigmPaier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_gmPa(x,gmPa))
+  return(x)
+}
+
+out_Cbs= function(x,Cbs) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$Cbs, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$Cbs)
+  
+  
+  # Apply on a copy oCbs the original data
+  
+  x[x$Cbs < (qnt[1] - iqt )|x$Cbs > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_Cbs<-function(x,Cbs){
+  #Add a unique identiCbsier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_Cbs(x,Cbs))
+  return(x)
+}
+
+out_Cm = function(x,Cm) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$Cm, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$Cm)
+  
+  
+  # Apply on a copy oCm the original data
+  
+  x[x$Cm < (qnt[1] - iqt )|x$Cm > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_Cm<-function(x,Cm){
+  #Add a unique identiCmier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_Cm(x,Cm))
+  return(x)
+}
+
+out_KCA = function(x,KCAmax) {
+  
+  # Get Q1 and Q3
+  qnt = quantile(x$KCAmax, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  iqt = 1.5 * IQR(x$KCAmax)
+  
+  
+  # Apply on a copy of the original data
+  x[x$KCAmax < (qnt[1] - iqt )|x$KCAmax > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+out_leak_SvC_2014= function(x,leak_SvC_2014) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$leak_SvC_2014, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$leak_SvC_2014)
+  
+  
+  # Apply on a copy oCm the original data
+  
+  x[x$leak_SvC_2014 < (qnt[1] - iqt )|x$leak_SvC_2014 > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_leak_SvC_2014<-function(x,leak_SvC_2014){
+  #Add a unique identiCmier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_leak_SvC_2014(x,leak_SvC_2014))
+  return(x)
+}
+
+out_vp= function(x,Vp_SvC_2014) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$Vp_SvC_2014, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$Vp_SvC_2014)
+  
+  # Apply on a copy oCm the original data
+  
+  x[x$Vp_SvC_2014 < (qnt[1] - iqt )|x$Vp_SvC_2014 > (qnt[2] + iqt),] = NA
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_vp<-function(x,Vp_SvC_2014){
+  #Add a unique identifier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_vp(x,Vp_SvC_2014))
+  return(x)
+}
+
+
+```
+
+Calculates r~LIGHT~ from the *A*~Ci~ curves
+
+```{r, RLIGHT functions}
+#This function finds the slope s´and the intercept r light for the initial portion of a light curve
+r_light1<-function(x){
+  #x$PARYII3<-(x$PARi*x$PhiPS2.mean)/3
+  x$PARYII3<-(x$PARi*x$PhiPS2)/3
+  
+  #m<-(lm(Photo.mean~PARYII3, data=x))
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75","125"))
+  
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75"))
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  #This code extracts the slope from model m and rename it slope instead of Ci_Pa 
+  x$rlight<-(-1)*unname(coefficients(m)[1])
+  x$s<-unname(coefficients(m)[2])
+  return(x)}
+
+#Plotting the Aci curves with the initial slope of 4 points model by a straigh line
+hidden_rlight1<- function(x, xlim = NULL, ylim = NULL)
+{ 
+  x$PARYII3<-(x$PARi*x$PhiPS2)/3
+  
+  if (is.null(ylim)) 
+    ylim <- with(x, c(min(-5), 1.1 * max(Photo)))
+  if (is.null(xlim)) 
+    xlim <- with(x, c(0, max(PARYII3)))
+  
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75","125"))
+  
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75"))
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  
+  x<-x[order(x$Photo),]#Organize in order to Photo values so the initial slope are the first points
+  
+  with(x, plot(PARYII3, Photo, type = "n", ylim = ylim, xlim = c(0,80), xaxs ="i", main = levels(as.factor(x$id)),
+               #text(labels = as.character(x[,"Point"]), pos = 4),
+               xlab = expression(italic(PARYII3) ~ ~(mu * mol~ m^-2 ~ s^-1)), 
+               ylab = expression(italic(A)[net] ~ ~(mu * mol ~ m^-2 ~ s^-1), side=-2)))
+  with(x, points(PARYII3, Photo, pch = 19,cex=2, col= "forestgreen"))
+  
+  #with(x, arrows(PARYII3,Photo + Photo.se, PARYII3,
+                 #Photo - Photo.se,code=3,angle=90,len=0.03))
+  p<- seq(-10,160,1)
+  with(x, points(p,predict(m, list(PARYII3=p)) , type = "l", col = "blue", 
+                 lwd = 2))
+  
+  legend(x="bottomright",legend=paste(" Rlight intercept",as.character(round(intercept,3)),sep = " "))
+  return(x)
+}
+
+#Plotting all the Aci curves in a pdf file
+plot_rlight1<-function(x){
+  
+  #Add a unique identifier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp,x$plant, x$Oxygen.,sep="_"))
+  #Summary based on this identifier 
+  x<-summaryBy(.~ id+GrowthTemp+temp+plant+Point+Oxygen., data=x, keep.names = T,FUN = c(mean))
+  
+  pdf("rlight_plots_byplant.pdf")
+  dlply(x, .(id),function(x) hidden_rlight1(x))
+  #dev.off()
+  is<-ddply(x, .(id),function(x) r_light1(x))
+  x<-merge(x,is)
+  
+  return(x)}
+
+### This code is when I am working with the mean of plants it has the .mean 
+#This function finds the initial slope using the first 4 points in an Aci curve
+r_light<-function(x){
+  #x$PARYII3<-(x$PARi*x$PhiPS2.mean)/3
+  x$PARYII3<-(x$PARi.mean*x$PhiPS2.mean)/3
+  
+  #m<-(lm(Photo.mean~PARYII3, data=x))
+  m<-(lm(Photo.mean~PARYII3, data=x))
+  
+  #This code extracts the slope from model m and rename it slope instead of Ci_Pa 
+  x$rlight<-(-1)*unname(coefficients(m)[1])
+  x$s<-unname(coefficients(m)[2])
+  return(x)}
+
+#Plotting the Aci curves with the initial slope of 4 points model by a straigh line
+hidden_rlight<- function(x, xlim = NULL, ylim = NULL)
+{ 
+  x$PARYII3<-(x$PARi.mean*x$PhiPS2.mean)/3
+  
+  if (is.null(ylim)) 
+    ylim <- with(x, c(min(-5), 1.1 * max(Photo.mean)))
+  if (is.null(xlim)) 
+    xlim <- with(x, c(0, max(PARYII3)))
+  
+  m<-(lm(Photo.mean~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75","125"))
+  
+  m<-(lm(Photo.mean~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75"))
+  m<-(lm(Photo.mean~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  
+  x<-x[order(x$Photo.mean),]#Organize in order to Photo values so the initial slope are the first points
+  
+  with(x, plot(PARYII3, Photo.mean, type = "n", ylim = ylim, xlim = c(0,80), xaxs ="i", main = levels(as.factor(x$id)),
+               #text(labels = as.character(x[,"Point"]), pos = 4),
+               xlab = expression(italic(PARYII3) ~ ~(mu * mol~ m^-2 ~ s^-1)), 
+               ylab = expression(italic(A)[net] ~ ~(mu * mol ~ m^-2 ~ s^-1), side=-2)))
+  with(x, points(PARYII3, Photo.mean, pch = 19,cex=2, col= "forestgreen"))
+  
+  #with(x, arrows(PARYII3,Photo + Photo.se, PARYII3,
+  #Photo - Photo.se,code=3,angle=90,len=0.03))
+  p<- seq(-10,160,1)
+  with(x, points(p,predict(m, list(PARYII3=p)) , type = "l", col = "blue", 
+                 lwd = 2))
+  
+  legend(x="bottomright",legend=paste(" Rlight intercept",as.character(round(intercept,3)),sep = " "))
+  return(x)
+}
+
+
+#Plotting all the Aci curves in a pdf file
+plot_rlight<-function(x){
+  
+  #Add a unique identifier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, x$plant, x$Oxygen.,sep="_"))
+  #Summary based on this identifier 
+  x<-summaryBy(.~ id+GrowthTemp+plant+temp+Point+Oxygen., data=x, keep.names = T,FUN = c(mean))
+  
+  pdf("rlight_plots_by temp.pdf")
+  dlply(x, .(id),function(x) hidden_rlight(x))
+  #dev.off()
+  is<-ddply(x, .(id),function(x) r_light(x))
+  x<-merge(x,is)
+  
+  return(x)}
+
+```
+$\phi$ and *V*~p~ for von Caemmerer et al. (2014)
+
+```{r, leakiness and Vp for von Caemmerer et al. (2014)}
+b3p_SvC_2014 <- with(data = gmPPDKlim0, b3p-(e*(Rlight/(Photo+Rlight)-0.5*Rlight/(Photo+0.5*Rlight))))
+b4p_SvC_2014 <- with(data = gmPPDKlim0, gmPPDKlim0$b4p-(e*0.5*Rlight/(Photo+0.5*Rlight)))
+
+phi_num_SvC_2014 <- with(data = gmPPDKlim0, (( ((1-t)/(1+t))*Dobs ) - (a_bar_Ci/(1+t)) - (1.8-b4p_SvC_2014)*(Photo/(1000000000000*CaPa)) - (b4p_SvC_2014-(a_bar_Ci/(1+t)) )*(Ci.Ca)))
+phi_deno_SvC_2014 <- with(data = gmPPDKlim0, (b3p_SvC_2014 - 1.8) * (Ci.Ca-(Photo/(CaPa*1000000000000))) )
+
+gmPPDKlim0$phi_SvC_2014 <- phi_num_SvC_2014/phi_deno_SvC_2014 #Leakiness
+
+gmPPDKlim0$Vp_SvC_2014 = with(data = gmPPDKlim0,(Photo+0.5*Rlight)/(1-phi_SvC_2014)) # Vp for von Caemmerer 2014
+
+```
+
+Removing outliers from the dataset
+```{r, removing outliers from the dataset, eval= TRUE, echo=FALSE}
+gmsat1 <- gmsat0[c(gmsat0$Dobs>0 & gmsat0$Cbs>0 & gmsat0$gbsPa>0 & gmsat0$Cm>0 & gmsat0$Cm < gmsat0$CiPa & gmsat0$phi>0 & gmsat0$phi<1 & gmsat0$Sum.diff<0.5),]
+gmCAlim1 <- gmCAlim0[c(gmCAlim0$Dobs>0 & gmCAlim0$Cbs>0 & gmCAlim0$gbsPa>0 & gmCAlim0$Cm>0 & gmCAlim0$Cm < gmCAlim0$CiPa & gmCAlim0$phi>0 & gmCAlim0$phi<1 & gmCAlim0$Sum.diff<0.5),]
+gmPPDKlim1 <- gmPPDKlim0[c(gmPPDKlim0$Dobs>0 & gmPPDKlim0$Cbs>0 & gmPPDKlim0$gbsPa>0 & gmPPDKlim0$Cm>0 & gmPPDKlim0$Cm < gmPPDKlim0$CiPa & gmPPDKlim0$phi>0 & gmPPDKlim0$phi<1 & gmPPDKlim0$phi_SvC_2014<1 & gmPPDKlim0$Sum.diff< 0.5),]
+
+gmsat1 <- outliers_gbsPa(gmsat1,gbsPa)
+gmsat1 <- outliers_Cbs(gmsat1,Cbs)
+gmsat1 <- outliers_Cm(gmsat1,Cm)
+gmsat1 <- outliers(gmsat1,phi)
+gmsat1 <- outliers_gmPa(gmsat1,gmPa)
+
+boxplot(gmPa~temp*GrowthTemp, data=gmsat1)
+boxplot(gmPa~temp*GrowthTemp, data=gmsat1)
+boxplot(phi~temp*GrowthTemp, data=gmsat1)
+boxplot(gbsPa~temp*GrowthTemp, data=gmsat1)
+boxplot(Cbs~temp*GrowthTemp, data=gmsat1)
+
+gmCAlim1 <- outliers_gbsPa(gmCAlim1,gbsPa)
+gmCAlim1 <- outliers_Cbs(gmCAlim1,Cbs)
+gmCAlim1 <- outliers_Cm(gmCAlim1,Cm)
+gmCAlim1 <- outliers(gmCAlim1,phi)
+gmCAlim1 <- outliers_gmPa(gmCAlim1,gmPa)
+boxplot(gmPa~temp*GrowthTemp, data=gmCAlim1)
+boxplot(phi~temp*GrowthTemp, data=gmCAlim1)
+boxplot(gbsPa~temp*GrowthTemp, data=gmCAlim1)
+
+gmPPDKlim1 <- outliers_gbsPa(gmPPDKlim1,gbsPa)
+gmPPDKlim1 <- outliers_Cbs(gmPPDKlim1,Cbs)
+gmPPDKlim1 <- outliers_Cm(gmPPDKlim1,Cm)
+gmPPDKlim1 <- outliers(gmPPDKlim1,phi)
+gmPPDKlim1 <- outliers_gmPa(gmPPDKlim1,gmPa)
+
+boxplot(gmPa~temp*GrowthTemp, data=gmPPDKlim1)
+boxplot(phi~temp*GrowthTemp, data=gmPPDKlim1)
+boxplot(gbsPa~temp*GrowthTemp, data=gmPPDKlim1)
+boxplot(Photo~temp*GrowthTemp, data=gmPPDKlim1)
+boxplot(phi_SvC_2014~temp*GrowthTemp, data=gmPPDKlim1)
+
+
+gm1 <- summaryBy(.~ id+plant+GrowthTemp, data=gmsat1, keep.names = T)
+gm2 <- summaryBy(.~ id+plant+GrowthTemp, data=gmCAlim1, keep.names = T)
+gm3 <- summaryBy(.~ id+plant+GrowthTemp, data=gmPPDKlim1, keep.names = T)
+
+write.csv(gm1,file = "gm1_Nerea_April2019c.csv", row.names = FALSE)
+write.csv(gm2,file = "gm2_Nerea_April2019c.csv", row.names = FALSE)
+write.csv(gm3,file = "gm3_Nerea_April2019c.csv", row.names = FALSE)
+
+```
+
+Here leakiness is calculated following von Caemmerer 2014 as
+
+
+
+$$ \phi = \frac { (1-t)  ∆_{obs} \frac{  \overline{ a_{Ci} }   }{(1+t)} - (a_w - b_4) . \frac{A_{net} }{g_m.C_a}-(b_4 - \frac{   \overline{ a_{Ci} }     }{ (1+t) }).\frac{C_i}{C_a} } { (b_3  - s) . (\frac{C_i}{C_a} - \frac{A_{net} }{g_m.C_a})  } $$
+
+### CA~sat~ model
+
+Imputation of missing points
+```{r reads data for the CA~sat ~ model, eval=TRUE, warning = FALSE, echo= FALSE}
+
+gm1<-read.csv( "gm1_Nerea_April2019c.csv", head=TRUE)
+avg_gm1a<- summaryBy(phi~ GrowthTemp+temp+plant, data=gm1, keep.names = T, na.rm= TRUE)
+ezDesign(data = avg_gm1a,
+         temp,
+         plant,
+         GrowthTemp)
+
+avg_gm1a <- reshape(avg_gm1a, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+invisible(imputed_Data <- mice(avg_gm1a,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+comp_f <- mice::complete(imputed_Data,1)
+colnames(comp_f) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+f1 <- melt(comp_f,id=c("GrowthTemp","plant"))
+colnames(f1) <- c("GrowthTemp","plant","temp","phi")
+
+
+# Loading data for gmPa
+avg_gm1c<- summaryBy(gmPa~ GrowthTemp+temp+plant, data=gm1, keep.names = T, na.rm= TRUE)
+avg_gm1c <- reshape(avg_gm1c, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm1c,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+gmPa1 <-  mice::complete(imputed_Data,1)
+colnames(gmPa1) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gmPa1 <- melt(gmPa1,id=c("GrowthTemp","plant"))
+colnames(gmPa1) <- c("GrowthTemp","plant","temp","gmPa")
+
+
+avg_gmm1 <- merge(gmPa1, f1, by=c("GrowthTemp","plant","temp"))
+
+# Loading data for gbsPa
+avg_gm1d<- summaryBy(gbsPa ~ GrowthTemp + temp + plant, data=gm1, keep.names = T, na.rm= TRUE)
+avg_gm1d <- reshape(avg_gm1d, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm1d,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+gbsPa1 <-  mice::complete(imputed_Data,1)
+colnames(gbsPa1) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gbsPa1 <- melt(gbsPa1,id=c("GrowthTemp","plant"))
+colnames(gbsPa1) <- c("GrowthTemp","plant","temp","gbsPa")
+
+
+
+gbsPagm1 <- merge(gbsPa1, avg_gmm1, by=c("GrowthTemp","plant","temp")) # merges imputed data
+
+gm1 <- gm1[,!(colnames(gm1) %in% c("gbsPa", "gmPa", "phi"))]
+gm1 <- merge(gm1, gbsPagm1, by=c("GrowthTemp","plant","temp"),all = TRUE) #creates full dataset with imputed columns
+
+
+
+ezDesign(data = gm1,
+         temp,
+         plant,
+         GrowthTemp)
+
+gm1$method<- rep("sat",112)
+write.csv(gm1,file = "gm1_Nerea_April2019 imputedc.csv", row.names = FALSE)
+```
+
+### CA~lim~ model
+
+Imputation of missing points
+```{r reads data for the CA~lim~ model, eval=TRUE, warning = FALSE, echo = FALSE}
+
+# gm CAlim
+gm2<-read.csv("gm2_Nerea_April2019c.csv", head=TRUE)
+avg_gm2al<- summaryBy(phi~ GrowthTemp+temp+plant, data=gm2, keep.names = T, na.rm= TRUE)
+ezDesign(data = avg_gm2al,
+         temp,
+         plant,
+         GrowthTemp)
+
+avg_gm2al <- reshape(avg_gm2al, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+invisible(imputed_Data <- mice(avg_gm2al,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+comp_f <-  mice::complete(imputed_Data,1)
+colnames(comp_f) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+f2 <- melt(comp_f,id=c("GrowthTemp","plant"))
+colnames(f2) <- c("GrowthTemp","plant","temp","phi")
+
+
+# Loading data for gmPa
+avg_gm2c<- summaryBy(gmPa~ GrowthTemp+temp+plant, data=gm2, keep.names = T, na.rm= TRUE)
+avg_gm2c <- reshape(avg_gm2c, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm2c,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+gmPa2 <-  mice::complete(imputed_Data,1)
+colnames(gmPa2) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gmPa2 <- melt(gmPa2,id=c("GrowthTemp","plant"))
+colnames(gmPa2) <- c("GrowthTemp","plant","temp","gmPa")
+
+
+avg_gmm2 <- merge(gmPa2, f2, by=c("GrowthTemp","plant","temp"))
+
+# Loading data for gbsPa
+avg_gm2d<- summaryBy(gbsPa~ GrowthTemp+temp+plant, data=gm2, keep.names = T, na.rm= TRUE)
+avg_gm2d <- reshape(avg_gm2d, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm2d,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+gbsPa2 <-  mice::complete(imputed_Data,1)
+colnames(gbsPa2) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gbsPa2 <- melt(gbsPa2,id=c("GrowthTemp","plant"))
+colnames(gbsPa2) <- c("GrowthTemp","plant","temp","gbsPa")
+
+
+gbsPagm2 <- merge(gbsPa2, avg_gmm2, by=c("GrowthTemp","plant","temp"))
+
+
+gm2 <- gm2[,!(colnames(gm2) %in% c("gbsPa", "gmPa", "phi"))]
+gm2 <- merge(gm2, gbsPagm2, by=c("GrowthTemp","plant","temp"),all = TRUE)
+
+
+ezDesign(data = gm2,
+         temp,
+         plant,
+         GrowthTemp)
+
+gm2$method<- rep("CAlim",112)
+write.csv(gm2,file = "gm2_Nerea_April2019 imputedc.csv", row.names = FALSE)
+```
+
+#CA and PPDK lim model
+
+Imputation of missing points
+```{r, reads data for the CA+PPDK~lim~ model, eval=TRUE, warning = FALSE, echo=FALSE}
+
+gm3<-read.csv("gm3_Nerea_April2019c.csv", head=TRUE)
+avg_gm3al<- summaryBy(phi~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+ezDesign(data = avg_gm3al,
+         temp,
+         plant,
+         GrowthTemp)
+
+avg_gm3al <- reshape(avg_gm3al, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+invisible(imputed_Data <- mice(avg_gm3al,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+comp_f <-  mice::complete(imputed_Data,1)
+colnames(comp_f) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+f3 <- melt(comp_f,id=c("GrowthTemp","plant"))
+colnames(f3) <- c("GrowthTemp","plant","temp","phi")
+
+# Loading data for phi. inf.comp
+avg_gm3bl<- summaryBy(phi_SvC_2014~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3bl <- reshape(avg_gm3bl, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm3bl,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+comp_inf <-  mice::complete(imputed_Data,1)
+colnames(comp_inf) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+inf3 <- melt(comp_inf,id=c("GrowthTemp","plant"))
+colnames(inf3) <- c("GrowthTemp","plant","temp","phi_SvC_2014")
+
+#finf3 <- merge(f3, inf3, by=c("GrowthTemp","plant", "temp"))
+f3inf3 <- merge(f3, inf3, by=c("GrowthTemp","plant", "temp"))
+
+
+# Loading data for gmPa
+avg_gm3c<- summaryBy(gmPa~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3c <- reshape(avg_gm3c, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm3c, m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+gmPa3 <-  mice::complete(imputed_Data,1)
+colnames(gmPa3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gmPa3 <- melt(gmPa3,id=c("GrowthTemp","plant"))
+colnames(gmPa3) <- c("GrowthTemp","plant","temp","gmPa")
+
+avg_gmm3 <- merge(gmPa3, f3inf3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for gbsPa
+avg_gm3d<- summaryBy(gbsPa~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3d <- reshape(avg_gm3d, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm3d,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+gbsPa3 <-  mice::complete(imputed_Data,1)
+colnames(gbsPa3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gbsPa3 <- melt(gbsPa3,id=c("GrowthTemp","plant"))
+colnames(gbsPa3) <- c("GrowthTemp","plant","temp","gbsPa")
+
+gbsPagm3 <- merge(gbsPa3, avg_gmm3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for Photo
+avg_gm3e<- summaryBy(Photo~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3e <- reshape(avg_gm3e, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm3e,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+Photo3 <-  mice::complete(imputed_Data,1)
+colnames(Photo3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Photo3 <- melt(Photo3,id=c("GrowthTemp","plant"))
+colnames(Photo3) <- c("GrowthTemp","plant","temp","Photo")
+
+m3e <- merge(gbsPagm3, Photo3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for Cond
+gm3$Cond<- gm3$Cond*1000/gm3$Press
+
+avg_gm3f<- summaryBy(Cond~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3f <- reshape(avg_gm3f, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm3f,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+Cond3 <-  mice::complete(imputed_Data,1)
+colnames(Cond3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Cond3 <- melt(Cond3,id=c("GrowthTemp","plant"))
+colnames(Cond3) <- c("GrowthTemp","plant","temp","Cond")
+
+m3f <- merge(m3e, Cond3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for Ci.Ca
+avg_gm3g<- summaryBy(Ci.Ca~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3g <- reshape(avg_gm3g, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm3g,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+Ci.Ca3 <-  mice::complete(imputed_Data,1)
+colnames(Ci.Ca3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Ci.Ca3 <- melt(Ci.Ca3,id=c("GrowthTemp","plant"))
+colnames(Ci.Ca3) <- c("GrowthTemp","plant","temp","Ci.Ca")
+
+m3g <- merge(m3f, Ci.Ca3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for Dobs
+avg_gm3h<- summaryBy(Dobs~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3h <- reshape(avg_gm3h, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm3h,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+Dobs3 <-  mice::complete(imputed_Data,1)
+colnames(Dobs3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Dobs3 <- melt(Dobs3,id=c("GrowthTemp","plant"))
+colnames(Dobs3) <- c("GrowthTemp","plant","temp","Dobs")
+
+m3h <- merge(m3g, Dobs3, by=c("GrowthTemp","plant","temp"))
+
+# Loading data for vp
+avg_gm3i<- summaryBy(Vp_SvC_2014~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3i <- reshape(avg_gm3i, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_gm3i,m=5, maxit=50, metiod= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+Vp_SvC_2014 <-  mice::complete(imputed_Data,1)
+colnames(Vp_SvC_2014) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Vp_SvC_2014 <- melt(Vp_SvC_2014,id=c("GrowthTemp","plant"))
+colnames(Vp_SvC_2014) <- c("GrowthTemp","plant","temp","vp_SvC_2014")
+
+m3i <- merge(m3h, Vp_SvC_2014, by = c("GrowthTemp","plant","temp"))
+
+
+#____________________    calculating rlight from the Aci curves dataset   ___________________________________
+rlight<-read.csv("Rlightsubset Misc.csv")
+rlight<-plot_rlight1(rlight)
+rlight<-rlight[!rlight$rlight<0,]
+
+# Loading data for R_LIGHT
+avg_rlight<- summaryBy(rlight~ GrowthTemp+temp+plant, data=rlight, keep.names = T, na.rm= TRUE)
+avg_rlight <- reshape(avg_rlight, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+invisible(imputed_Data <- mice(avg_rlight,m=5, maxit=50, method= 'pmm', seed =500))
+invisible (summary(imputed_Data))
+rlight <-  mice::complete(imputed_Data,1)
+colnames(rlight) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+rlight <- melt(rlight,id=c("GrowthTemp","plant"))
+colnames(rlight) <- c("GrowthTemp","plant","temp","rlight")
+rlight$temp <- as.integer(as.character(rlight$temp))
+
+## now take mean and error for plotting 
+meanse_rlight<- summaryBy(rlight~ GrowthTemp+temp, data=rlight,FUN = c(mean,se))
+colnames(meanse_rlight) <- c("GrowthTemp","temp","rlight", "rlight.se")
+
+m3_rlight <- merge(m3i, meanse_rlight)
+
+
+gm3 <- gm3[,!(colnames(gm3) %in% c("gbsPa", "gmPa", "phi", "phi_SvC_2014", "Photo", "Cond", "Ci.Ca", "Dobs","vp_SvC_2014", "Rlight"))]
+
+gm3<- merge(gm3, m3_rlight, by=c("GrowthTemp","plant","temp"),all = TRUE)
+
+ezDesign(data = gm3,
+         temp,
+         plant,
+         GrowthTemp)
+
+gm3$method<- rep("PPDKlim",112)
+write.csv(gm3,file = "gm3_Nerea_April2019 imputedc.csv", row.names = FALSE)
+```
+
+
+
+This is the imputed dataset for resubmission 26 Nov 2019
+
+```{r, imputed dataset for Misc paper}
+
+gm1<-read.csv("gm1_Nerea_April2019 imputedc.csv", head=TRUE)
+gm2<-read.csv("gm2_Nerea_April2019 imputedc.csv", head=TRUE)
+gm3<-read.csv("gm3_Nerea_April2019 imputedc.csv", head=TRUE)
+
+```
+
+Calculating A~sat~ from the A~Ci~ curves dataset
+
+```{r, cleaning Aci curves, echo = FALSE}
+x<-read.csv("AciMisc.csv")##read dataframe
+x$id<-as.character(paste(x$GrowthTemp, x$temp, x$plant,sep="_"))
+
+# Removing plants that do not have more than one point at 200
+
+x<-x[!c(x$id=="14C_10_plant3" & x$Obs %in% c(15,16)) ,]
+x<-x[!c(x$id=="14C_20_plant1") ,]
+x<-x[!c(x$id=="14C_35_plant1") ,]
+
+#Removing plants that are non-sensical in all the points
+x<-x[!c(x$id=="14C_10_plant5") ,]
+x<-x[!c(x$id=="14C_10_plant2" & x$Obs %in% c(314,318,320,322,323,328,329,330)) ,]
+
+#Removing points that produce negative slope
+x<-x[!c(x$id=="25C_15_plant2" & x$Obs %in% c(137)) ,]
+
+#Removing plants that have the extra 380 point or an isolated estrange point
+x<-x[!c(x$id=="14C_10_plant4" & x$Obs %in% c(37,38)) ,]
+x<-x[!c(x$id=="14C_15_plant2" & x$Obs %in% c(118)) ,]
+x<-x[!c(x$id=="14C_15_plant5" & x$Obs %in% c(111)) ,]
+x<-x[!c(x$id=="14C_35_plant3" & x$Obs %in% c(189,190)) ,]
+x<-x[!c(x$id=="14C_40_plant2" & x$Obs %in% c(116)) ,]
+x<-x[!c(x$id=="25C_10_plant1" & x$Obs %in% c(2)) ,]
+x<-x[!c(x$id=="25C_15_plant1" & x$Obs %in% c(140)) ,]
+x<-x[!c(x$id=="25C_15_plant3" & x$Obs %in% c(106)) ,]
+x<-x[!c(x$id=="25C_15_plant4" & x$Obs %in% c(89)) ,]
+x<-x[!c(x$id=="25C_15_plant5" & x$Obs %in% c(173)) ,]
+x<-x[!c(x$id=="25C_20_plant1" & x$Obs %in% c(24)) ,]
+x<-x[!c(x$id=="25C_20_plant12" & x$Obs %in% c(107)) ,]
+x<-x[!c(x$id=="25C_25_plant4" & x$Obs %in% c(107)) ,]
+
+# 18 Oct 2019 Asaph requested the Aci curves
+meanse_Aci<- summaryBy( .~ GrowthTemp+temp + Point,data=x,FUN = c(mean, se), na.rm =TRUE)
+
+write.csv(meanse_Aci,file = "Aci curves by GrowthTemp.csv", row.names = FALSE)
+```
+
+Creates dataset summarized by plant
+```{r, creates dataset summarized by plant}
+library(lattice)
+meanse1<- summaryBy( Photo + Cond + Ci.Ca + Rlight + Dobs + phi + gbsPa + Cm + gmPa + Cbs + Vp + Sum.diff ~ GrowthTemp+temp,
+                     data = gm1, FUN = c(mean, se), na.rm =TRUE)
+
+meanse2<- summaryBy( Photo+ Cond + Ci.Ca + Rlight + Dobs + phi  + gbsPa + Cm + gmPa + Cbs + Vp + Sum.diff~GrowthTemp+temp,
+                    data = gm2,FUN = c(mean, se), na.rm =TRUE)
+
+meanse3<- summaryBy( Photo+ Cond + Ci.Ca + rlight + Dobs + phi + phi_SvC_2014 + gbsPa + Cm + gmPa + Cbs + Vpr  + Vp_app + Vp + Vp_SvC_2014+ Sum.diff ~ 
+                       GrowthTemp+temp, data=gm3,FUN = c(mean, se), na.rm =TRUE)
+
+write.csv(meanse3,"meanse3 misc v2.csv", row.names = FALSE)
+```
+
+
+This function specifies Miscanthus x giganteous grown at 14°C (open symbols) and 25°C (closed symbols)
+
+```{r, specifies color, eval = TRUE}
+COL<- function(meanse3){ifelse(meanse3$GrowthTemp=="14C", "white", "black")} 
+CEX=1   ##define size of points
+
+```
+
+Figure 1.  Code to get confidence intervals for A~net~
+```{r, rlight functions, echo= TRUE}
+arrh_mod<-function(x,Ea,dS,k25,Hd){
+  R<- 0.008317 ## unit for KJ per mol per K
+  #Hd<- 200
+  Tk<- x+273.15
+  A<- exp ( Ea*(Tk-298.15)/(298.15*R*Tk) )
+  B<- 1+exp(((298.15*dS)-Hd)/(298.15*R))
+  C<- 1+exp(((Tk*dS)-Hd)/(Tk*R))
+  D<- B/C
+  k25*A*D
+}
+
+
+arrh_T<-function(temp,Ea=63.8,dS=1.2,k25= 3.7295521, Hd=366.8){
+  R<- 0.008317 ## unit for KJ per mol per K
+  #Hd<- 200
+  Tk<- temp+273.15
+  A<- exp ( Ea*(Tk-298.15)/(298.15*R*Tk) )
+  B<- 1+exp(((298.15*dS)-Hd)/(298.15*R))
+  C<- 1+exp(((Tk*dS)-Hd)/(Tk*R))
+  D<- B/C
+  yval<- k25*A*D
+  df<- data.frame(yval= yval, temp= temp, Ea=Ea,dS=dS,k25=k25, Hd= Hd)
+  return(df)
+}
+###
+fit_arrh25<- function(dat, varnames = list(yval = "Photo", temp = "temp"))
+{ 
+  arrh_wrap <- function(temp, ...) {
+    r <- arrh_T(temp= temp,...)
+    r$yval}
+  
+  nlsfit <- nlsLM(yval ~ arrh_wrap(temp, Ea=Ea,dS=dS,k25=k25, Hd=Hd),data = dat, start = list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8))
+  p <- coef(nlsfit)
+  
+  arrhrun <- arrh_T(temp = dat$temp,  Ea= p[[1]],  dS = p[[2]], k25= p[[3]], Hd = p[[4]])
+  
+  arrhrun$Ymeas <- dat$yval
+  arrhrun$temp <- dat$temp
+  names(arrhrun)[names(arrhrun) == "yval"] <- "Ymodel"
+  avars <- match(c("temp", "Ymeas", "Ymodel"), names(arrhrun))
+  arrhrun <- arrhrun[, c(avars, setdiff(1:ncol(arrhrun), avars))]
+  
+  
+  l <- list()
+  l$df <- arrhrun[order(arrhrun$temp), ]
+  l$pars <- summary(nlsfit)$coefficients[, 1:2]
+  l$nlsfit <- nlsfit
+  formals(arrh_T)$temp<- mean(dat$temp)
+  formals(arrh_T)$Ea <- l$pars[1]
+  formals(arrh_T)$dS <- l$pars[2]
+  formals(arrh_T)$k25 <- l$pars[3]
+  formals(arrh_T)$Hd <- l$pars[4]
+  l$arrh_T <- arrh_T
+  
+  class(l)<- "arrhfit"
+  return(l)
+}
+
+
+fit_arrh14<- function(dat, varnames = list(yval = "Photo", temp = "temp"))
+{ 
+  arrh_wrap <- function(temp, ...) {
+    r <- arrh_T(temp= temp,...)
+    r$yval}
+  #Initial values for Vcmax in Lin et al, 2011
+  nlsfit <- nlsLM(yval ~ arrh_wrap(temp, Ea=Ea,dS=dS,k25=k25, Hd=Hd),data = dat, start = list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd= 366.8))
+            
+  p <- coef(nlsfit)
+  
+  arrhrun <- arrh_T(temp = dat$temp,  Ea= p[[1]],  dS = p[[2]], k25= p[[3]], Hd= p[[4]])
+  
+  arrhrun$Ymeas <- dat$yval
+  arrhrun$temp <- dat$temp
+  names(arrhrun)[names(arrhrun) == "yval"] <- "Ymodel"
+  avars <- match(c("temp", "Ymeas", "Ymodel"), names(arrhrun))
+  arrhrun <- arrhrun[, c(avars, setdiff(1:ncol(arrhrun), avars))]
+  
+  
+  l <- list()
+  l$df <- arrhrun[order(arrhrun$temp), ]
+  l$pars <- summary(nlsfit)$coefficients[, 1:2]
+  l$nlsfit <- nlsfit
+  formals(arrh_T)$temp<- mean(dat$temp)
+  formals(arrh_T)$Ea <- l$pars[1]
+  formals(arrh_T)$dS <- l$pars[2]
+  formals(arrh_T)$k25 <- l$pars[3]
+  formals(arrh_T)$Hd <- l$pars[4]
+  l$arrh_T <- arrh_T
+  
+  class(l)<- "arrhfit"
+  return(l)
+}
+
+
+print.arrhfit <- function (x, ...){
+  cat("Result of arrh fit.\n\n")
+  cat("Data and predictions:\n")
+  print(x$df)
+  cat("\nEstimated parameters:\n")
+  print(x$pars)
+}
+
+#########
+bootarrh25<- function(d, nboot=500){
+  p <- list()
+  for(i in 1:nboot){
+    ii <- sample(1:nrow(d), replace=TRUE)
+    dat <- d[ii,]
+    p[[i]] <- try(fit_arrh25(dat))
+    message(i)
+  }
+  
+  q<- p[sapply(p, function(x) class(x) != "try-error")]
+  return(q)
+}
+
+bootarrh14<- function(d, nboot=500){
+  p <- list()
+  for(i in 1:nboot){
+    ii <- sample(1:nrow(d), replace=TRUE)
+    dat <- d[ii,]
+    p[[i]] <- try(fit_arrh14(dat))
+    message(i)
+  }
+  
+  q<- p[sapply(p, function(x) class(x) != "try-error")]
+  return(q)
+}
+
+###Function to estimate upper and lower CI
+get_CI<- function(b){
+  cis <- seq(10, 40, length=100)
+  phot <- matrix(ncol=100,nrow=length(b))
+  for(i in 1:length(b)){
+    phot[i,] <- b[[i]]$arrh_T(temp=cis)$yval
+  }
+  lcl <- apply(phot,2,quantile, 0.025)
+  ucl <- apply(phot,2,quantile, 0.975)
+  return(data.frame(Ci=cis, lcl=lcl, ucl=ucl))
+}
+
+## Finction to calculate  CI
+addpoly<-  function(x,y1,y2,col=alpha("lightgrey",0.8),...){
+  ii <- order(x)
+  y1 <- y1[ii]
+  y2 <- y2[ii]
+  x <- x[ii]
+  polygon(c(x,rev(x)), c(y1, rev(y2)), col=col, border=NA,...)
+}
+
+
+##################################
+##Plotting Function
+
+plot_arrh_ci<- function(dfr, x){
+  nadp<- dfr # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "Photo")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci2<- function(dfr, x){
+  nadp<- avg_gm2 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "Photo")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci3<- function(dfr, x){
+  nadp<- avg_gm3 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "Photo")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci4<- function(dfr, x){
+  nadp<- avg_gm4 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "Photo")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+
+#Temp optimum function 
+T_opt <- function (Hd =Hd,dS=dS,Ea=Ea){
+  R<-0.0083143 # KiloJules mol-1 K-1
+  Topt<- (-Hd) / ((R * log (-Ea/( Ea- Hd))) - dS)
+  Topt<- Topt - 273.15
+  return (Topt)
+}
+```
+
+
+
+

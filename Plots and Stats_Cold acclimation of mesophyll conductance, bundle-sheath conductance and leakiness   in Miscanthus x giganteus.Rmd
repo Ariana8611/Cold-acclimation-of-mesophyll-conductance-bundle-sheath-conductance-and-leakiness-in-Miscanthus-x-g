@@ -1,0 +1,3736 @@
+---
+title: Cold acclimation of mesophyll conductance, bundle-sheath conductance and leakiness
+  in Miscanthus x giganteus
+author: "Erika A. Serrano-Romero and Asaph Cousins"
+date: "12 Dec 2019, Feast of our Lady of Guadalupe"
+output: html_document
+---
+
+## Graphs and statistical analysis
+Loading required packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading packages
+```{r, loading packages, message=FALSE, warning=FALSE}
+
+options(java.parameters = "-Xmx4g" )
+library(XLConnect)
+library(doBy)
+library(ez)
+library(reshape2)
+library(scales)
+library(plyr)
+library(minpack.lm)
+library(lmerTest)
+library(nlWaldTest)
+library(ggplot2)
+library(mice)
+
+```
+
+
+Loading the results from the script "Misc combined C4 and discrimination model.Rmd"
+```{r, loading data}
+gmsat0<-read.csv("submission 2019/results_gmsat0.csv", head=TRUE)
+gmCAlim0<-read.csv("submission 2019/results_gmCAlim.csv", head=TRUE)
+gmPPDKlim0<-read.csv("submission 2019/results_gmCA_PPDKlim.csv", head=TRUE)
+```
+
+```{r, functions, echo=FALSE}
+se<- function(x, ...) {
+  se <- sd(x, ...)/sqrt(sum(!is.na(x)))
+  return(se)
+}
+
+
+out = function(x,phi) {
+  
+  # Get Q1 and Q3
+  qnt = quantile(x$phi, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  iqt = 1.5 * IQR(x$phi)
+  
+  
+  # Apply on a copy of the original data
+ x[x$phi < (qnt[1] - iqt )|x$phi > (qnt[2] + iqt),] = NA
+  
+
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers<-function(x,phi){
+  #Add a unique identifier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out(x,phi))
+  return(x)
+}
+
+
+
+
+out_gbsPa= function(x,gbsPa) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$gbsPa, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$gbsPa)
+  
+  
+  # Apply on a copy ogbsPa the original data
+  
+  x[x$gbsPa < (qnt[1] - iqt )|x$gbsPa > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_gbsPa<-function(x,gbsPa){
+  #Add a unique identigbsPaier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_gbsPa(x,gbsPa))
+  return(x)
+}
+
+out_gmPa = function(x,gmPa) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$gmPa, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$gmPa)
+  
+  
+  # Apply on a copy ogmPa the original data
+  
+  x[x$gmPa < (qnt[1] - iqt )|x$gmPa > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_gmPa<-function(x,gmPa){
+  #Add a unique identigmPaier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_gmPa(x,gmPa))
+  return(x)
+}
+
+out_Cbs= function(x,Cbs) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$Cbs, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$Cbs)
+  
+  
+  # Apply on a copy oCbs the original data
+  
+  x[x$Cbs < (qnt[1] - iqt )|x$Cbs > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_Cbs<-function(x,Cbs){
+  #Add a unique identiCbsier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_Cbs(x,Cbs))
+  return(x)
+}
+
+out_Cm = function(x,Cm) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$Cm, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$Cm)
+  
+  
+  # Apply on a copy oCm the original data
+  
+  x[x$Cm < (qnt[1] - iqt )|x$Cm > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_Cm<-function(x,Cm){
+  #Add a unique identiCmier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_Cm(x,Cm))
+  return(x)
+}
+
+out_KCA = function(x,KCAmax) {
+  
+  # Get Q1 and Q3
+  qnt = quantile(x$KCAmax, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  iqt = 1.5 * IQR(x$KCAmax)
+  
+  
+  # Apply on a copy of the original data
+  x[x$KCAmax < (qnt[1] - iqt )|x$KCAmax > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+out_leak_SvC_2014= function(x,leak_SvC_2014) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$leak_SvC_2014, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$leak_SvC_2014)
+  
+  
+  # Apply on a copy oCm the original data
+  
+  x[x$leak_SvC_2014 < (qnt[1] - iqt )|x$leak_SvC_2014 > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_leak_SvC_2014<-function(x,leak_SvC_2014){
+  #Add a unique identiCmier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_leak_SvC_2014(x,leak_SvC_2014))
+  return(x)
+}
+
+out_vp= function(x,Vp_SvC_2014) {
+  
+  # Get Q1 and Q3
+  
+  qnt = quantile(x$Vp_SvC_2014, probs=c(.25, .75))
+  
+  # Get the interquartile range time 1.5
+  
+  iqt = 1.5 * IQR(x$Vp_SvC_2014)
+  
+  
+  # Apply on a copy oCm the original data
+  
+  x[x$Vp_SvC_2014 < (qnt[1] - iqt )|x$Vp_SvC_2014 > (qnt[2] + iqt),] = NA
+  
+  
+  # Remove incomplete cases and return the resulted variables
+  return(x[complete.cases(x),])
+}
+
+outliers_vp<-function(x,Vp_SvC_2014){
+  #Add a unique identifier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, sep="_"))
+  x<-ddply(x, .(id),function(x) out_vp(x,Vp_SvC_2014))
+  return(x)
+}
+
+
+```
+
+Calculates r-{LIGHT} from the *A*_{Ci}curves
+
+```{r, RLIGHT functions}
+#This function finds the slope s´and the intercept r light for the initial portion of a light curve
+r_light1<-function(x){
+  #x$PARYII3<-(x$PARi*x$PhiPS2.mean)/3
+  x$PARYII3<-(x$PARi*x$PhiPS2)/3
+  
+  #m<-(lm(Photo.mean~PARYII3, data=x))
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75","125"))
+  
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75"))
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  #This code extracts the slope from model m and rename it slope instead of Ci_Pa 
+  x$rlight<-(-1)*unname(coefficients(m)[1])
+  x$s<-unname(coefficients(m)[2])
+  return(x)}
+
+#Plotting the Aci curves with the initial slope of 4 points model by a straigh line
+hidden_rlight1<- function(x, xlim = NULL, ylim = NULL)
+{ 
+  x$PARYII3<-(x$PARi*x$PhiPS2)/3
+  
+  if (is.null(ylim)) 
+    ylim <- with(x, c(min(-5), 1.1 * max(Photo)))
+  if (is.null(xlim)) 
+    xlim <- with(x, c(0, max(PARYII3)))
+  
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75","125"))
+  
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75"))
+  m<-(lm(Photo~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  
+  x<-x[order(x$Photo),]#Organize in order to Photo values so the initial slope are the first points
+  
+  with(x, plot(PARYII3, Photo, type = "n", ylim = ylim, xlim = c(0,80), xaxs ="i", main = levels(as.factor(x$id)),
+               #text(labels = as.character(x[,"Point"]), pos = 4),
+               xlab = expression(italic(PARYII3) ~ ~(mu * mol~ m^-2 ~ s^-1)), 
+               ylab = expression(italic(A)[net] ~ ~(mu * mol ~ m^-2 ~ s^-1), side=-2)))
+  with(x, points(PARYII3, Photo, pch = 19,cex=2, col= "forestgreen"))
+  
+  #with(x, arrows(PARYII3,Photo + Photo.se, PARYII3,
+                 #Photo - Photo.se,code=3,angle=90,len=0.03))
+  p<- seq(-10,160,1)
+  with(x, points(p,predict(m, list(PARYII3=p)) , type = "l", col = "blue", 
+                 lwd = 2))
+  
+  legend(x="bottomright",legend=paste(" Rlight intercept",as.character(round(intercept,3)),sep = " "))
+  return(x)
+}
+
+#Plotting all the Aci curves in a pdf file
+plot_rlight1<-function(x){
+  
+  #Add a unique identifier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp,x$plant, x$Oxygen.,sep="_"))
+  #Summary based on this identifier 
+  x<-summaryBy(.~ id+GrowthTemp+temp+plant+Point+Oxygen., data=x, keep.names = T,FUN = c(mean))
+  
+  pdf("figures/rlight/rlight_plots_byplant.pdf")
+  dlply(x, .(id),function(x) hidden_rlight1(x))
+  #dev.off()
+  is<-ddply(x, .(id),function(x) r_light1(x))
+  x<-merge(x,is)
+  
+  return(x)}
+
+### This code is when I am working with the mean of plants it has the .mean 
+#This function finds the initial slope using the first 4 points in an Aci curve
+r_light<-function(x){
+  #x$PARYII3<-(x$PARi*x$PhiPS2.mean)/3
+  x$PARYII3<-(x$PARi.mean*x$PhiPS2.mean)/3
+  
+  #m<-(lm(Photo.mean~PARYII3, data=x))
+  m<-(lm(Photo.mean~PARYII3, data=x))
+  
+  #This code extracts the slope from model m and rename it slope instead of Ci_Pa 
+  x$rlight<-(-1)*unname(coefficients(m)[1])
+  x$s<-unname(coefficients(m)[2])
+  return(x)}
+
+#Plotting the Aci curves with the initial slope of 4 points model by a straigh line
+hidden_rlight<- function(x, xlim = NULL, ylim = NULL)
+{ 
+  x$PARYII3<-(x$PARi.mean*x$PhiPS2.mean)/3
+  
+  if (is.null(ylim)) 
+    ylim <- with(x, c(min(-5), 1.1 * max(Photo.mean)))
+  if (is.null(xlim)) 
+    xlim <- with(x, c(0, max(PARYII3)))
+  
+  m<-(lm(Photo.mean~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75","125"))
+  
+  m<-(lm(Photo.mean~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  if (intercept<0) x<-subset(x,x$Point %in% c("50","75"))
+  m<-(lm(Photo.mean~PARYII3, data=x))
+  intercept<-(-1)*coef(m)[1]
+  
+  
+  x<-x[order(x$Photo.mean),]#Organize in order to Photo values so the initial slope are the first points
+  
+  with(x, plot(PARYII3, Photo.mean, type = "n", ylim = ylim, xlim = c(0,80), xaxs ="i", main = levels(as.factor(x$id)),
+               #text(labels = as.character(x[,"Point"]), pos = 4),
+               xlab = expression(italic(PARYII3) ~ ~(mu * mol~ m^-2 ~ s^-1)), 
+               ylab = expression(italic(A)[net] ~ ~(mu * mol ~ m^-2 ~ s^-1), side=-2)))
+  with(x, points(PARYII3, Photo.mean, pch = 19,cex=2, col= "forestgreen"))
+  
+  #with(x, arrows(PARYII3,Photo + Photo.se, PARYII3,
+  #Photo - Photo.se,code=3,angle=90,len=0.03))
+  p<- seq(-10,160,1)
+  with(x, points(p,predict(m, list(PARYII3=p)) , type = "l", col = "blue", 
+                 lwd = 2))
+  
+  legend(x="bottomright",legend=paste(" Rlight intercept",as.character(round(intercept,3)),sep = " "))
+  return(x)
+}
+
+
+#Plotting all the Aci curves in a pdf file
+plot_rlight<-function(x){
+  
+  #Add a unique identifier that includes GrowthTemp, measurement temp and plant
+  x$id<-as.character(paste(x$GrowthTemp, x$temp, x$plant, x$Oxygen.,sep="_"))
+  #Summary based on this identifier 
+  x<-summaryBy(.~ id+GrowthTemp+plant+temp+Point+Oxygen., data=x, keep.names = T,FUN = c(mean))
+  
+  pdf("figures/rlight/rlight_plots_by temp.pdf")
+  dlply(x, .(id),function(x) hidden_rlight(x))
+  #dev.off()
+  is<-ddply(x, .(id),function(x) r_light(x))
+  x<-merge(x,is)
+  
+  return(x)}
+
+```
+/phi and *V*_p for von Caemmerer et al. (2014)
+
+```{r, leakiness and Vp for von Caemmerer et al. (2014)}
+b3p_SvC_2014 <- with(data = gmPPDKlim0, b3p-(e*(Rlight/(Photo+Rlight)-0.5*Rlight/(Photo+0.5*Rlight))))
+b4p_SvC_2014 <- with(data = gmPPDKlim0, gmPPDKlim0$b4p-(e*0.5*Rlight/(Photo+0.5*Rlight)))
+
+phi_num_SvC_2014 <- with(data = gmPPDKlim0, (( ((1-t)/(1+t))*Dobs ) - (a_bar_Ci/(1+t)) - (1.8-b4p_SvC_2014)*(Photo/(1000000000000*CaPa)) - (b4p_SvC_2014-(a_bar_Ci/(1+t)) )*(Ci.Ca)))
+phi_deno_SvC_2014 <- with(data = gmPPDKlim0, (b3p_SvC_2014 - 1.8) * (Ci.Ca-(Photo/(CaPa*1000000000000))) )
+
+gmPPDKlim0$phi_SvC_2014 <- phi_num_SvC_2014/phi_deno_SvC_2014 #Leakiness
+
+gmPPDKlim0$Vp_SvC_2014 = with(data = gmPPDKlim0,(Photo+0.5*Rlight)/(1-phi_SvC_2014)) # Vp for von Caemmerer 2014
+
+```
+
+Removing outliers from the dataset
+```{r, removing outliers from the dataset, eval= TRUE}
+gmsat1 <- gmsat0[c(gmsat0$Dobs>0 & gmsat0$Cbs>0 & gmsat0$gbsPa>0 & gmsat0$Cm>0 & gmsat0$Cm < gmsat0$CiPa & gmsat0$phi>0 & gmsat0$phi<1 & gmsat0$Sum.diff<0.5),]
+gmCAlim1 <- gmCAlim0[c(gmCAlim0$Dobs>0 & gmCAlim0$Cbs>0 & gmCAlim0$gbsPa>0 & gmCAlim0$Cm>0 & gmCAlim0$Cm < gmCAlim0$CiPa & gmCAlim0$phi>0 & gmCAlim0$phi<1 & gmCAlim0$Sum.diff<0.5),]
+gmPPDKlim1 <- gmPPDKlim0[c(gmPPDKlim0$Dobs>0 & gmPPDKlim0$Cbs>0 & gmPPDKlim0$gbsPa>0 & gmPPDKlim0$Cm>0 & gmPPDKlim0$Cm < gmPPDKlim0$CiPa & gmPPDKlim0$phi>0 & gmPPDKlim0$phi<1 & gmPPDKlim0$phi_SvC_2014<1 & gmPPDKlim0$Sum.diff< 0.5),]
+
+gmsat1 <- outliers_gbsPa(gmsat1,gbsPa)
+gmsat1 <- outliers_Cbs(gmsat1,Cbs)
+gmsat1 <- outliers_Cm(gmsat1,Cm)
+gmsat1 <- outliers(gmsat1,phi)
+gmsat1 <- outliers_gmPa(gmsat1,gmPa)
+
+boxplot(gmPa~temp*GrowthTemp, data=gmsat1)
+boxplot(gmPa~temp*GrowthTemp, data=gmsat1)
+boxplot(phi~temp*GrowthTemp, data=gmsat1)
+boxplot(gbsPa~temp*GrowthTemp, data=gmsat1)
+boxplot(Cbs~temp*GrowthTemp, data=gmsat1)
+
+gmCAlim1 <- outliers_gbsPa(gmCAlim1,gbsPa)
+gmCAlim1 <- outliers_Cbs(gmCAlim1,Cbs)
+gmCAlim1 <- outliers_Cm(gmCAlim1,Cm)
+gmCAlim1 <- outliers(gmCAlim1,phi)
+gmCAlim1 <- outliers_gmPa(gmCAlim1,gmPa)
+boxplot(gmPa~temp*GrowthTemp, data=gmCAlim1)
+boxplot(phi~temp*GrowthTemp, data=gmCAlim1)
+boxplot(gbsPa~temp*GrowthTemp, data=gmCAlim1)
+
+gmPPDKlim1 <- outliers_gbsPa(gmPPDKlim1,gbsPa)
+gmPPDKlim1 <- outliers_Cbs(gmPPDKlim1,Cbs)
+gmPPDKlim1 <- outliers_Cm(gmPPDKlim1,Cm)
+gmPPDKlim1 <- outliers(gmPPDKlim1,phi)
+gmPPDKlim1 <- outliers_gmPa(gmPPDKlim1,gmPa)
+
+boxplot(gmPa~temp*GrowthTemp, data=gmPPDKlim1)
+boxplot(phi~temp*GrowthTemp, data=gmPPDKlim1)
+boxplot(gbsPa~temp*GrowthTemp, data=gmPPDKlim1)
+boxplot(Photo~temp*GrowthTemp, data=gmPPDKlim1)
+boxplot(phi_SvC_2014~temp*GrowthTemp, data=gmPPDKlim1)
+
+
+gm1 <- summaryBy(.~ id+plant+GrowthTemp, data=gmsat1, keep.names = T)
+gm2 <- summaryBy(.~ id+plant+GrowthTemp, data=gmCAlim1, keep.names = T)
+gm3 <- summaryBy(.~ id+plant+GrowthTemp, data=gmPPDKlim1, keep.names = T)
+
+write.csv(gm1,file = "rawdata/gm/gm1_Nerea_April2019c.csv", row.names = FALSE)
+write.csv(gm2,file = "rawdata/gm/gm2_Nerea_April2019c.csv", row.names = FALSE)
+write.csv(gm3,file = "rawdata/gm/gm3_Nerea_April2019c.csv", row.names = FALSE)
+
+```
+
+
+
+
+Here leakiness is calculated following von Caemmerer 2014 as
+
+
+
+$$ \phi = \frac { (1-t)  ∆_{obs} \frac{  \overline{ a_{Ci} }   }{(1+t)} - (a_w - b_4) . \frac{A_{net} }{g_m.C_a}-(b_4 - \frac{   \overline{ a_{Ci} }     }{ (1+t) }).\frac{C_i}{C_a} } { (b_3  - s) . (\frac{C_i}{C_a} - \frac{A_{net} }{g_m.C_a})  } $$
+
+### CA~sat~ model
+
+Imputation of missing points
+```{r reads data for the CA~sat ~ model, eval=TRUE, warning = FALSE}
+
+gm1<-read.csv( "rawdata/gm/gm1_Nerea_April2019c.csv", head=TRUE)
+avg_gm1a<- summaryBy(phi~ GrowthTemp+temp+plant, data=gm1, keep.names = T, na.rm= TRUE)
+ezDesign(data = avg_gm1a,
+         temp,
+         plant,
+         GrowthTemp)
+
+avg_gm1a <- reshape(avg_gm1a, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+imputed_Data <- mice(avg_gm1a,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+comp_f <- mice::complete(imputed_Data,1)
+colnames(comp_f) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+f1 <- melt(comp_f,id=c("GrowthTemp","plant"))
+colnames(f1) <- c("GrowthTemp","plant","temp","phi")
+
+
+# Loading data for gmPa
+avg_gm1c<- summaryBy(gmPa~ GrowthTemp+temp+plant, data=gm1, keep.names = T, na.rm= TRUE)
+avg_gm1c <- reshape(avg_gm1c, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm1c,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+gmPa1 <-  mice::complete(imputed_Data,1)
+colnames(gmPa1) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gmPa1 <- melt(gmPa1,id=c("GrowthTemp","plant"))
+colnames(gmPa1) <- c("GrowthTemp","plant","temp","gmPa")
+
+
+avg_gmm1 <- merge(gmPa1, f1, by=c("GrowthTemp","plant","temp"))
+
+# Loading data for gbsPa
+avg_gm1d<- summaryBy(gbsPa ~ GrowthTemp + temp + plant, data=gm1, keep.names = T, na.rm= TRUE)
+avg_gm1d <- reshape(avg_gm1d, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm1d,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+gbsPa1 <-  mice::complete(imputed_Data,1)
+colnames(gbsPa1) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gbsPa1 <- melt(gbsPa1,id=c("GrowthTemp","plant"))
+colnames(gbsPa1) <- c("GrowthTemp","plant","temp","gbsPa")
+
+
+
+gbsPagm1 <- merge(gbsPa1, avg_gmm1, by=c("GrowthTemp","plant","temp")) # merges imputed data
+
+gm1 <- gm1[,!(colnames(gm1) %in% c("gbsPa", "gmPa", "phi"))]
+gm1 <- merge(gm1, gbsPagm1, by=c("GrowthTemp","plant","temp"),all = TRUE) #creates full dataset with imputed columns
+
+
+
+ezDesign(data = gm1,
+         temp,
+         plant,
+         GrowthTemp)
+
+gm1$method<- rep("sat",112)
+write.csv(gm1,file = "output/gm1_Nerea_April2019 imputedc.csv", row.names = FALSE)
+```
+### CA~lim~ model
+
+Imputation of missing points
+```{r reads data for the CA~lim~ model, eval=FALSE, warning = FALSE}
+
+# gm CAlim
+gm2<-read.csv("rawdata/gm/gm2_Nerea_April2019c.csv", head=TRUE)
+avg_gm2al<- summaryBy(phi~ GrowthTemp+temp+plant, data=gm2, keep.names = T, na.rm= TRUE)
+ezDesign(data = avg_gm2al,
+         temp,
+         plant,
+         GrowthTemp)
+
+avg_gm2al <- reshape(avg_gm2al, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+imputed_Data <- mice(avg_gm2al,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+comp_f <-  mice::complete(imputed_Data,1)
+colnames(comp_f) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+f2 <- melt(comp_f,id=c("GrowthTemp","plant"))
+colnames(f2) <- c("GrowthTemp","plant","temp","phi")
+
+
+# Loading data for gmPa
+avg_gm2c<- summaryBy(gmPa~ GrowthTemp+temp+plant, data=gm2, keep.names = T, na.rm= TRUE)
+avg_gm2c <- reshape(avg_gm2c, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm2c,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+gmPa2 <-  mice::complete(imputed_Data,1)
+colnames(gmPa2) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gmPa2 <- melt(gmPa2,id=c("GrowthTemp","plant"))
+colnames(gmPa2) <- c("GrowthTemp","plant","temp","gmPa")
+
+
+avg_gmm2 <- merge(gmPa2, f2, by=c("GrowthTemp","plant","temp"))
+
+# Loading data for gbsPa
+avg_gm2d<- summaryBy(gbsPa~ GrowthTemp+temp+plant, data=gm2, keep.names = T, na.rm= TRUE)
+avg_gm2d <- reshape(avg_gm2d, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm2d,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+gbsPa2 <-  mice::complete(imputed_Data,1)
+colnames(gbsPa2) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gbsPa2 <- melt(gbsPa2,id=c("GrowthTemp","plant"))
+colnames(gbsPa2) <- c("GrowthTemp","plant","temp","gbsPa")
+
+
+gbsPagm2 <- merge(gbsPa2, avg_gmm2, by=c("GrowthTemp","plant","temp"))
+
+
+gm2 <- gm2[,!(colnames(gm2) %in% c("gbsPa", "gmPa", "phi"))]
+gm2 <- merge(gm2, gbsPagm2, by=c("GrowthTemp","plant","temp"),all = TRUE)
+
+
+ezDesign(data = gm2,
+         temp,
+         plant,
+         GrowthTemp)
+
+gm2$method<- rep("CAlim",112)
+write.csv(gm2,file = "output/gm2_Nerea_April2019 imputedc.csv", row.names = FALSE)
+```
+
+#CA and PPDK lim model
+
+Imputation of missing points
+```{r, reads data for the CA+PPDK~lim~ model, eval=FALSE, warning = FALSE, message=FALSE}
+
+gm3<-read.csv("rawdata/gm/gm3_Nerea_April2019c.csv", head=TRUE)
+avg_gm3al<- summaryBy(phi~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+ezDesign(data = avg_gm3al,
+         temp,
+         plant,
+         GrowthTemp)
+
+avg_gm3al <- reshape(avg_gm3al, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+imputed_Data <- mice(avg_gm3al,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+comp_f <-  mice::complete(imputed_Data,1)
+colnames(comp_f) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+f3 <- melt(comp_f,id=c("GrowthTemp","plant"))
+colnames(f3) <- c("GrowthTemp","plant","temp","phi")
+
+# Loading data for phi. inf.comp
+avg_gm3bl<- summaryBy(phi_SvC_2014~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3bl <- reshape(avg_gm3bl, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm3bl,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+comp_inf <-  mice::complete(imputed_Data,1)
+colnames(comp_inf) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+inf3 <- melt(comp_inf,id=c("GrowthTemp","plant"))
+colnames(inf3) <- c("GrowthTemp","plant","temp","phi_SvC_2014")
+
+#finf3 <- merge(f3, inf3, by=c("GrowthTemp","plant", "temp"))
+f3inf3 <- merge(f3, inf3, by=c("GrowthTemp","plant", "temp"))
+
+
+# Loading data for gmPa
+avg_gm3c<- summaryBy(gmPa~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3c <- reshape(avg_gm3c, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm3c, m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+gmPa3 <-  mice::complete(imputed_Data,1)
+colnames(gmPa3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gmPa3 <- melt(gmPa3,id=c("GrowthTemp","plant"))
+colnames(gmPa3) <- c("GrowthTemp","plant","temp","gmPa")
+
+avg_gmm3 <- merge(gmPa3, f3inf3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for gbsPa
+avg_gm3d<- summaryBy(gbsPa~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3d <- reshape(avg_gm3d, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm3d,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+gbsPa3 <-  mice::complete(imputed_Data,1)
+colnames(gbsPa3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+gbsPa3 <- melt(gbsPa3,id=c("GrowthTemp","plant"))
+colnames(gbsPa3) <- c("GrowthTemp","plant","temp","gbsPa")
+
+gbsPagm3 <- merge(gbsPa3, avg_gmm3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for Photo
+avg_gm3e<- summaryBy(Photo~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3e <- reshape(avg_gm3e, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm3e,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+Photo3 <-  mice::complete(imputed_Data,1)
+colnames(Photo3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Photo3 <- melt(Photo3,id=c("GrowthTemp","plant"))
+colnames(Photo3) <- c("GrowthTemp","plant","temp","Photo")
+
+m3e <- merge(gbsPagm3, Photo3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for Cond
+gm3$Cond<- gm3$Cond*1000/gm3$Press
+
+avg_gm3f<- summaryBy(Cond~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3f <- reshape(avg_gm3f, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm3f,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+Cond3 <-  mice::complete(imputed_Data,1)
+colnames(Cond3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Cond3 <- melt(Cond3,id=c("GrowthTemp","plant"))
+colnames(Cond3) <- c("GrowthTemp","plant","temp","Cond")
+
+m3f <- merge(m3e, Cond3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for Ci.Ca
+avg_gm3g<- summaryBy(Ci.Ca~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3g <- reshape(avg_gm3g, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm3g,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+Ci.Ca3 <-  mice::complete(imputed_Data,1)
+colnames(Ci.Ca3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Ci.Ca3 <- melt(Ci.Ca3,id=c("GrowthTemp","plant"))
+colnames(Ci.Ca3) <- c("GrowthTemp","plant","temp","Ci.Ca")
+
+m3g <- merge(m3f, Ci.Ca3, by=c("GrowthTemp","plant","temp"))
+
+
+# Loading data for Dobs
+avg_gm3h<- summaryBy(Dobs~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3h <- reshape(avg_gm3h, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm3h,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+Dobs3 <-  mice::complete(imputed_Data,1)
+colnames(Dobs3) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Dobs3 <- melt(Dobs3,id=c("GrowthTemp","plant"))
+colnames(Dobs3) <- c("GrowthTemp","plant","temp","Dobs")
+
+m3h <- merge(m3g, Dobs3, by=c("GrowthTemp","plant","temp"))
+
+# Loading data for vp
+avg_gm3i<- summaryBy(Vp_SvC_2014~ GrowthTemp+temp+plant, data=gm3, keep.names = T, na.rm= TRUE)
+avg_gm3i <- reshape(avg_gm3i, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_gm3i,m=5, maxit=50, metiod= 'pmm', seed =500)
+summary(imputed_Data)
+Vp_SvC_2014 <-  mice::complete(imputed_Data,1)
+colnames(Vp_SvC_2014) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+Vp_SvC_2014 <- melt(Vp_SvC_2014,id=c("GrowthTemp","plant"))
+colnames(Vp_SvC_2014) <- c("GrowthTemp","plant","temp","vp_SvC_2014")
+
+m3i <- merge(m3h, Vp_SvC_2014, by = c("GrowthTemp","plant","temp"))
+
+
+#____________________    calculating rlight from the Aci curves dataset   ___________________________________
+rlight<-read.csv("rawdata/Rlight/Rlightsubset Misc.csv")
+rlight<-plot_rlight1(rlight)
+rlight<-rlight[!rlight$rlight<0,]
+
+# Loading data for R_LIGHT
+avg_rlight<- summaryBy(rlight~ GrowthTemp+temp+plant, data=rlight, keep.names = T, na.rm= TRUE)
+avg_rlight <- reshape(avg_rlight, idvar= c("GrowthTemp","plant"),timevar = "temp" ,direction = "wide")
+
+imputed_Data <- mice(avg_rlight,m=5, maxit=50, method= 'pmm', seed =500)
+summary(imputed_Data)
+rlight <-  mice::complete(imputed_Data,1)
+colnames(rlight) <- c("GrowthTemp","plant","10","15","20","25","30","35","40")
+rlight <- melt(rlight,id=c("GrowthTemp","plant"))
+colnames(rlight) <- c("GrowthTemp","plant","temp","rlight")
+rlight$temp <- as.integer(as.character(rlight$temp))
+
+## now take mean and error for plotting 
+meanse_rlight<- summaryBy(rlight~ GrowthTemp+temp, data=rlight,FUN = c(mean,se))
+colnames(meanse_rlight) <- c("GrowthTemp","temp","rlight", "rlight.se")
+
+m3_rlight <- merge(m3i, meanse_rlight)
+
+
+gm3 <- gm3[,!(colnames(gm3) %in% c("gbsPa", "gmPa", "phi", "phi_SvC_2014", "Photo", "Cond", "Ci.Ca", "Dobs","vp_SvC_2014", "Rlight"))]
+
+gm3<- merge(gm3, m3_rlight, by=c("GrowthTemp","plant","temp"),all = TRUE)
+
+ezDesign(data = gm3,
+         temp,
+         plant,
+         GrowthTemp)
+
+gm3$method<- rep("PPDKlim",112)
+write.csv(gm3,file = "output/gm3_Nerea_April2019 imputedc.csv", row.names = FALSE)
+```
+
+
+
+This is the imputed dataset for resubmission 26 Nov 2019
+
+```{r, imputed dataset for Misc paper}
+
+gm1<-read.csv("output/gm1_Nerea_April2019 imputedc.csv", head=TRUE)
+gm2<-read.csv("output/gm2_Nerea_April2019 imputedc.csv", head=TRUE)
+gm3<-read.csv("output/gm3_Nerea_April2019 imputedc.csv", head=TRUE)
+
+```
+
+
+Calculating A~sat~ from the A~{Ci}~ curves dataset
+
+```{r, cleaning Aci curves, echo = FALSE}
+x<-read.csv("rawdata/crude_data/Aci/AciMisc.csv")##read dataframe
+x$id<-as.character(paste(x$GrowthTemp, x$temp, x$plant,sep="_"))
+
+# Removing plants that do not have more than one point at 200
+
+x<-x[!c(x$id=="14C_10_plant3" & x$Obs %in% c(15,16)) ,]
+x<-x[!c(x$id=="14C_20_plant1") ,]
+x<-x[!c(x$id=="14C_35_plant1") ,]
+
+#Removing plants that are non-sensical in all the points
+x<-x[!c(x$id=="14C_10_plant5") ,]
+x<-x[!c(x$id=="14C_10_plant2" & x$Obs %in% c(314,318,320,322,323,328,329,330)) ,]
+
+#Removing points that produce negative slope
+x<-x[!c(x$id=="25C_15_plant2" & x$Obs %in% c(137)) ,]
+
+#Removing plants that have the extra 380 point or an isolated estrange point
+x<-x[!c(x$id=="14C_10_plant4" & x$Obs %in% c(37,38)) ,]
+x<-x[!c(x$id=="14C_15_plant2" & x$Obs %in% c(118)) ,]
+x<-x[!c(x$id=="14C_15_plant5" & x$Obs %in% c(111)) ,]
+x<-x[!c(x$id=="14C_35_plant3" & x$Obs %in% c(189,190)) ,]
+x<-x[!c(x$id=="14C_40_plant2" & x$Obs %in% c(116)) ,]
+x<-x[!c(x$id=="25C_10_plant1" & x$Obs %in% c(2)) ,]
+x<-x[!c(x$id=="25C_15_plant1" & x$Obs %in% c(140)) ,]
+x<-x[!c(x$id=="25C_15_plant3" & x$Obs %in% c(106)) ,]
+x<-x[!c(x$id=="25C_15_plant4" & x$Obs %in% c(89)) ,]
+x<-x[!c(x$id=="25C_15_plant5" & x$Obs %in% c(173)) ,]
+x<-x[!c(x$id=="25C_20_plant1" & x$Obs %in% c(24)) ,]
+x<-x[!c(x$id=="25C_20_plant12" & x$Obs %in% c(107)) ,]
+x<-x[!c(x$id=="25C_25_plant4" & x$Obs %in% c(107)) ,]
+
+# 18 Oct 2019 Asaph requested the Aci curves
+meanse_Aci<- summaryBy( .~ GrowthTemp+temp + Point,data=x,FUN = c(mean, se), na.rm =TRUE)
+
+write.csv(meanse_Aci,file = "output/Aci curves by GrowthTemp.csv", row.names = FALSE)
+```
+
+Creates dataset summarized by plant
+```{r, creates dataset summarized by plant}
+library(lattice)
+meanse1<- summaryBy( Photo + Cond + Ci.Ca + Rlight + Dobs + phi + gbsPa + Cm + gmPa + Cbs + Vp + Sum.diff ~ GrowthTemp+temp,
+                     data = gm1, FUN = c(mean, se), na.rm =TRUE)
+
+meanse2<- summaryBy( Photo+ Cond + Ci.Ca + Rlight + Dobs + phi  + gbsPa + Cm + gmPa + Cbs + Vp + Sum.diff~GrowthTemp+temp,
+                    data = gm2,FUN = c(mean, se), na.rm =TRUE)
+
+meanse3<- summaryBy( Photo+ Cond + Ci.Ca + rlight + Dobs + phi + phi_SvC_2014 + gbsPa + Cm + gmPa + Cbs + Vpr  + Vp_app + Vp + Vp_SvC_2014+ Sum.diff ~ 
+                       GrowthTemp+temp, data=gm3,FUN = c(mean, se), na.rm =TRUE)
+
+write.csv(meanse3,"output/meanse3 misc v2.csv", row.names = FALSE)
+```
+
+
+This function specifies Miscanthus x giganteous grown at 14°C (open symbols) and 25°C (closed symbols)
+
+```{r, specifies color, eval = TRUE}
+COL<- function(meanse3){ifelse(meanse3$GrowthTemp=="14C", "white", "black")} 
+CEX=1   ##define size of points
+
+```
+
+Figure 1.  Code to get confidence intervals for A_{net}
+```{r, rlight functions, echo= TRUE}
+
+arrh_mod<-function(x,Ea,dS,k25,Hd){
+  R<- 0.008317 ## unit for KJ per mol per K
+  #Hd<- 200
+  Tk<- x+273.15
+  A<- exp ( Ea*(Tk-298.15)/(298.15*R*Tk) )
+  B<- 1+exp(((298.15*dS)-Hd)/(298.15*R))
+  C<- 1+exp(((Tk*dS)-Hd)/(Tk*R))
+  D<- B/C
+  k25*A*D
+}
+
+
+arrh_T<-function(temp,Ea=63.8,dS=1.2,k25= 3.7295521, Hd=366.8){
+  R<- 0.008317 ## unit for KJ per mol per K
+  #Hd<- 200
+  Tk<- temp+273.15
+  A<- exp ( Ea*(Tk-298.15)/(298.15*R*Tk) )
+  B<- 1+exp(((298.15*dS)-Hd)/(298.15*R))
+  C<- 1+exp(((Tk*dS)-Hd)/(Tk*R))
+  D<- B/C
+  yval<- k25*A*D
+  df<- data.frame(yval= yval, temp= temp, Ea=Ea,dS=dS,k25=k25, Hd= Hd)
+  return(df)
+}
+###
+fit_arrh25<- function(dat, varnames = list(yval = "Photo", temp = "temp"))
+{ 
+  arrh_wrap <- function(temp, ...) {
+    r <- arrh_T(temp= temp,...)
+    r$yval}
+  
+  nlsfit <- nlsLM(yval ~ arrh_wrap(temp, Ea=Ea,dS=dS,k25=k25, Hd=Hd),data = dat, start = list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8))
+  p <- coef(nlsfit)
+  
+  arrhrun <- arrh_T(temp = dat$temp,  Ea= p[[1]],  dS = p[[2]], k25= p[[3]], Hd = p[[4]])
+  
+  arrhrun$Ymeas <- dat$yval
+  arrhrun$temp <- dat$temp
+  names(arrhrun)[names(arrhrun) == "yval"] <- "Ymodel"
+  avars <- match(c("temp", "Ymeas", "Ymodel"), names(arrhrun))
+  arrhrun <- arrhrun[, c(avars, setdiff(1:ncol(arrhrun), avars))]
+  
+  
+  l <- list()
+  l$df <- arrhrun[order(arrhrun$temp), ]
+  l$pars <- summary(nlsfit)$coefficients[, 1:2]
+  l$nlsfit <- nlsfit
+  formals(arrh_T)$temp<- mean(dat$temp)
+  formals(arrh_T)$Ea <- l$pars[1]
+  formals(arrh_T)$dS <- l$pars[2]
+  formals(arrh_T)$k25 <- l$pars[3]
+  formals(arrh_T)$Hd <- l$pars[4]
+  l$arrh_T <- arrh_T
+  
+  class(l)<- "arrhfit"
+  return(l)
+}
+
+
+fit_arrh14<- function(dat, varnames = list(yval = "Photo", temp = "temp"))
+{ 
+  arrh_wrap <- function(temp, ...) {
+    r <- arrh_T(temp= temp,...)
+    r$yval}
+  #Initial values for Vcmax in Lin et al, 2011
+  nlsfit <- nlsLM(yval ~ arrh_wrap(temp, Ea=Ea,dS=dS,k25=k25, Hd=Hd),data = dat, start = list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd= 366.8))
+            
+  p <- coef(nlsfit)
+  
+  arrhrun <- arrh_T(temp = dat$temp,  Ea= p[[1]],  dS = p[[2]], k25= p[[3]], Hd= p[[4]])
+  
+  arrhrun$Ymeas <- dat$yval
+  arrhrun$temp <- dat$temp
+  names(arrhrun)[names(arrhrun) == "yval"] <- "Ymodel"
+  avars <- match(c("temp", "Ymeas", "Ymodel"), names(arrhrun))
+  arrhrun <- arrhrun[, c(avars, setdiff(1:ncol(arrhrun), avars))]
+  
+  
+  l <- list()
+  l$df <- arrhrun[order(arrhrun$temp), ]
+  l$pars <- summary(nlsfit)$coefficients[, 1:2]
+  l$nlsfit <- nlsfit
+  formals(arrh_T)$temp<- mean(dat$temp)
+  formals(arrh_T)$Ea <- l$pars[1]
+  formals(arrh_T)$dS <- l$pars[2]
+  formals(arrh_T)$k25 <- l$pars[3]
+  formals(arrh_T)$Hd <- l$pars[4]
+  l$arrh_T <- arrh_T
+  
+  class(l)<- "arrhfit"
+  return(l)
+}
+
+
+print.arrhfit <- function (x, ...){
+  cat("Result of arrh fit.\n\n")
+  cat("Data and predictions:\n")
+  print(x$df)
+  cat("\nEstimated parameters:\n")
+  print(x$pars)
+}
+
+#########
+bootarrh25<- function(d, nboot=500){
+  p <- list()
+  for(i in 1:nboot){
+    ii <- sample(1:nrow(d), replace=TRUE)
+    dat <- d[ii,]
+    p[[i]] <- try(fit_arrh25(dat))
+    message(i)
+  }
+  
+  q<- p[sapply(p, function(x) class(x) != "try-error")]
+  return(q)
+}
+
+bootarrh14<- function(d, nboot=500){
+  p <- list()
+  for(i in 1:nboot){
+    ii <- sample(1:nrow(d), replace=TRUE)
+    dat <- d[ii,]
+    p[[i]] <- try(fit_arrh14(dat))
+    message(i)
+  }
+  
+  q<- p[sapply(p, function(x) class(x) != "try-error")]
+  return(q)
+}
+
+###Function to estimate upper and lower CI
+get_CI<- function(b){
+  cis <- seq(10, 40, length=100)
+  phot <- matrix(ncol=100,nrow=length(b))
+  for(i in 1:length(b)){
+    phot[i,] <- b[[i]]$arrh_T(temp=cis)$yval
+  }
+  lcl <- apply(phot,2,quantile, 0.025)
+  ucl <- apply(phot,2,quantile, 0.975)
+  return(data.frame(Ci=cis, lcl=lcl, ucl=ucl))
+}
+
+## Finction to calculate  CI
+addpoly<-  function(x,y1,y2,col=alpha("lightgrey",0.8),...){
+  ii <- order(x)
+  y1 <- y1[ii]
+  y2 <- y2[ii]
+  x <- x[ii]
+  polygon(c(x,rev(x)), c(y1, rev(y2)), col=col, border=NA,...)
+}
+
+
+##################################
+##Plotting Function
+
+plot_arrh_ci<- function(dfr, x){
+  nadp<- dfr # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "Photo")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci2<- function(dfr, x){
+  nadp<- avg_gm2 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "Photo")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci3<- function(dfr, x){
+  nadp<- avg_gm3 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "Photo")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci4<- function(dfr, x){
+  nadp<- avg_gm4 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "Photo")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+
+#Temp optimum function 
+T_opt <- function (Hd =Hd,dS=dS,Ea=Ea){
+  R<-0.0083143 # KiloJules mol-1 K-1
+  Topt<- (-Hd) / ((R * log (-Ea/( Ea- Hd))) - dS)
+  Topt<- Topt - 273.15
+  return (Topt)
+}
+
+#Figure 1a,b,c   code to get confidence intervals for A_net
+
+en_data<- gm3[ , c("GrowthTemp", "temp", "Photo", "plant")]
+en_data$yval<- en_data$Photo
+dat<- en_data
+
+en_d<- dlply(en_data, "GrowthTemp")
+
+T14 <- bootarrh14(na.omit(en_d$`14C`),500)
+ci_T14 <- get_CI(T14)
+
+T25   <- bootarrh25(en_d$`25C`,500)
+ci_T25 <- get_CI(T25)
+
+
+
+
+```
+Fig. 1. Temperature response of (a) Net rate of CO_2 assimilation; (b) ratio of internal to ambient partial pressures of CO_2 (C_i/C_a); (c) stomatal conductance (g_s) for *Miscanthus* x *giganteous* grown at 14°C (open circles, dashed line and light grey shade) and 25°C (closed circles, continuous line and dark gray shade)
+
+```{r, Figure 1a,b,c}
+#__________________________________     End Code to get confidence intervals for Anet ___________________________________
+
+pdf(file = "submission 2019/figures/fig 1 3x1 A_CiCa_gs v2.pdf",width=3.5, height=7)
+
+par(mfrow=c(3,1),omi= c(0.7,1,0.1,0.1),mar=c(0,0,0,0), tcl= 0.5, xpd= "NA",xaxs = "i", yaxs = "i")
+
+##1.1
+plot(Photo.mean~temp, meanse3,bg= alpha(COL(meanse3),0.9), pch=21, cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(5,55), xlim= c(5,45))
+
+#____________________   plot to code confidence intervals for A ________________________________
+addpoly(ci_T25$Ci, ci_T25$ucl, ci_T25$lcl, col=alpha("dimgrey",0.6))
+addpoly(ci_T14$Ci, ci_T14$ucl, ci_T14$lcl, col=alpha("lightgrey",0.6))
+
+
+plot_arrh_ci(gm3, "Photo")
+#____________________   plot to code confidence intervals for A ________________________________
+
+##ad error bars
+with(meanse3, arrows(temp, Photo.mean + Photo.se, temp, 
+                     Photo.mean - Photo.se,code=3,angle=90,len=0.03))
+
+points(Photo.mean~temp, subset(meanse3, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")), 0.9), pch=21, cex=CEX)
+points(Photo.mean~temp, subset(meanse3, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")), 0.9), pch=21, cex=CEX)
+
+
+axis(1, labels = FALSE, tck = -0.03)
+axis(2, las=2, cex.axis=1.5, tck = -0.03) ##see las= 2 
+
+##add axis labels
+mtext(expression(paste(italic(A)[net], " (",mu, "mol ", m^-2, s^-1,")", sep= "")),
+      side= 2, line = 3.5, cex= 1.3)
+
+## add graph letter
+mtext("(a)", side=2, las=2.2, at=51, line=-2.5, cex= 1.5)
+
+legend(25,30, legend = c("25 ºC", "14 ºC"), pt.bg =  alpha(c("black", "white"),0.9),pch=21,
+       bty = 'n', cex= 1.85, ncol=1, pt.cex=CEX)
+
+##Fig. 1b CiCa vs temp
+plot(Ci.Ca.mean~temp, meanse3, pch= "",ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(0.2,0.8), xlim= c(5,45))
+
+##ad error bars
+with(meanse3, arrows(temp, Ci.Ca.mean + Ci.Ca.se, temp, 
+                     Ci.Ca.mean - Ci.Ca.se,code=3,angle=90,len=0.03))
+
+lines(Ci.Ca.mean~temp, subset(meanse3, GrowthTemp=="25C"))
+lines(Ci.Ca.mean~temp, subset(meanse3, GrowthTemp=="14C"),lty=2)
+
+points(Ci.Ca.mean~temp, subset(meanse3, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")), 0.9), pch=21, cex=CEX)
+points(Ci.Ca.mean~temp, subset(meanse3, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")), 0.9), pch=21, cex=CEX)
+
+##nice finishing to the plot
+axis(1, labels = phi, tck = -0.03)
+axis(2, las=2, cex.axis=1.5, tck = -0.03,at = seq(0.3,0.7,by =0.1)) ##see las= 2 ,
+
+## add graph number
+mtext("(b)", side=2, las=2.2, at=0.75, line=-2.5, cex= 1.5)
+
+
+##add axis labels
+mtext(expression(paste(C[i]/C[a])),
+      side= 2, line= 3.5, cex= 1.3)
+
+##Fig. 1c  cond vs temp
+plot(Cond.mean~temp, meanse3, pch="", cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(1,5), xlim= c(5,45))
+
+##ad error bars
+with(meanse3, arrows(temp, Cond.mean + Cond.se, temp, 
+                     Cond.mean - Cond.se,code=3,angle=90,len=0.03))
+
+lines(Cond.mean~temp, subset(meanse3, GrowthTemp=="25C"))
+lines(Cond.mean~temp, subset(meanse3, GrowthTemp=="14C"),lty=2)
+
+points(Cond.mean~temp, subset(meanse3, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")), 0.9), pch=21, cex=CEX)
+points(Cond.mean~temp, subset(meanse3, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")), 0.9), pch=21, cex=CEX)
+
+axis(1, labels = T, cex.axis=1.5,tck = -0.03)
+axis(2, las=2, cex.axis=1.5,tck = -0.03)#, at = seq(0.1,0.44,by =0.1)) ##see las= 2 
+
+## add graph number
+mtext("(c)", side=2, las=2.2, at=4.65, line=-2.5, cex= 1.5)
+
+##add axis labels
+mtext(expression(paste(italic(g)[s], " (", "µmol ", m^-2, s^-1, Pa^-1,")", sep= "")),
+      side= 2, line= 3.5, cex= 1.1)
+
+## add graph number
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 3.5, cex= 1.3)
+
+#dev.off()
+
+```
+
+
+Fig 2. Temperature response of (a) mitochondrial non-photorespiratory CO_2 evolution in the light (R_{LIGHT}); (b) observed ^{13}C leaf discrimination (D^{13}C_{obs}, ‰) for *Miscanthus* x *giganteous grown* at 14°C (open circles, dashed line and light gray shade) and 25°C (closed circles, continuous line and dark gray shade)
+
+
+```{r, confidence intervals for rlight, echo=FALSE}
+#Initial values from Berkley 2015
+
+arrh<-function(x,Ea,k25){
+  R<- 0.008317 ## unit for KJ per mol per K
+  Tk<- x+273.15
+  A<- Ea*(Tk-298.15)/(298.15*R*Tk)
+  k25*exp(A)
+}
+
+
+arrh1_T<-function(temp,Ea=56.1,k25=1.0090246){
+  R<- 0.008317 ## unit for KJ per mol per K
+  Tk<- temp+273.15
+  A<- Ea*(Tk-298.15)/(298.15*R*Tk)
+  yval<- k25*exp(A)
+  df<- data.frame(yval= yval, temp= temp, Ea=Ea,k25=k25)
+  return(df)
+}
+###
+fit_arrh25<- function(dat, varnames = list(yval = "Photo", temp = "temp"))
+{ 
+  arrh_wrap <- function(temp, ...) {
+    r <- arrh1_T(temp= temp,...)
+    r$yval}
+  
+  nlsfit <- nlsLM(yval ~ arrh_wrap(temp, Ea=Ea,k25=k25),data = dat, start = list(Ea= 56.1, k25=1.0090246))
+  p <- coef(nlsfit)
+  
+  arrhrun <- arrh1_T(temp = dat$temp,  Ea= p[[1]], k25= p[[2]])
+  
+  arrhrun$Ymeas <- dat$yval
+  arrhrun$temp <- dat$temp
+  names(arrhrun)[names(arrhrun) == "yval"] <- "Ymodel"
+  avars <- match(c("temp", "Ymeas", "Ymodel"), names(arrhrun))
+  arrhrun <- arrhrun[, c(avars, setdiff(1:ncol(arrhrun), avars))]
+  
+  
+  l <- list()
+  l$df <- arrhrun[order(arrhrun$temp), ]
+  l$pars <- summary(nlsfit)$coefficients[, 1:2]
+  l$nlsfit <- nlsfit
+  formals(arrh1_T)$temp<- mean(dat$temp)
+  formals(arrh1_T)$Ea <- l$pars[1]
+  formals(arrh1_T)$k25 <- l$pars[2]
+  l$arrh1_T <- arrh1_T
+  
+  class(l)<- "arrhfit"
+  return(l)
+}
+
+fit_arrh14<- function(dat, varnames = list(yval = "Photo", temp = "temp"))
+{ 
+  arrh_wrap <- function(temp, ...) {
+    r <- arrh1_T(temp= temp,...)
+    r$yval}
+  
+  nlsfit <- nlsLM(yval ~ arrh_wrap(temp, Ea=Ea,k25=k25),data = dat, start = list(Ea= 56.1, k25=2.5033726))
+  p <- coef(nlsfit)
+  
+  arrhrun <- arrh1_T(temp = dat$temp,  Ea= p[[1]], k25= p[[2]])
+  
+  arrhrun$Ymeas <- dat$yval
+  arrhrun$temp <- dat$temp
+  names(arrhrun)[names(arrhrun) == "yval"] <- "Ymodel"
+  avars <- match(c("temp", "Ymeas", "Ymodel"), names(arrhrun))
+  arrhrun <- arrhrun[, c(avars, setdiff(1:ncol(arrhrun), avars))]
+  
+  
+  l <- list()
+  l$df <- arrhrun[order(arrhrun$temp), ]
+  l$pars <- summary(nlsfit)$coefficients[, 1:2]
+  l$nlsfit <- nlsfit
+  formals(arrh1_T)$temp<- mean(dat$temp)
+  formals(arrh1_T)$Ea <- l$pars[1]
+  formals(arrh1_T)$k25 <- l$pars[2]
+  l$arrh1_T <- arrh1_T
+  
+  class(l)<- "arrhfit"
+  return(l)
+}
+
+
+
+
+print.arrhfit <- function (x, ...){
+  cat("Result of arrh fit.\n\n")
+  cat("Data and predictions:\n")
+  print(x$df)
+  cat("\nEstimated parameters:\n")
+  print(x$pars)
+}
+
+#########
+bootarrh14<- function(d, nboot=500){
+  p <- list()
+  for(i in 1:nboot){
+    ii <- sample(1:nrow(d), replace=TRUE)
+    dat <- d[ii,]
+    p[[i]] <- try(fit_arrh14(dat))
+    message(i)
+  }
+  
+  q<- p[sapply(p, function(x) class(x) != "try-error")]
+  return(q)
+}
+
+bootarrh25<- function(d, nboot=500){
+  p <- list()
+  for(i in 1:nboot){
+    ii <- sample(1:nrow(d), replace=TRUE)
+    dat <- d[ii,]
+    p[[i]] <- try(fit_arrh25(dat))
+    message(i)
+  }
+  
+  q<- p[sapply(p, function(x) class(x) != "try-error")]
+  return(q)
+}
+
+
+###Function to estimate upper and lower CI
+get_CI<- function(b){
+  cis <- seq(10, 40, length=100)
+  phot <- matrix(ncol=100,nrow=length(b))
+  for(i in 1:length(b)){
+    phot[i,] <- b[[i]]$arrh1_T(temp=cis)$yval
+  }
+  lcl <- apply(phot,2,quantile, 0.025)
+  ucl <- apply(phot,2,quantile, 0.975)
+  return(data.frame(Ci=cis, lcl=lcl, ucl=ucl))
+}
+
+## Finction to plt CI
+addpoly<-  function(x,y1,y2,col=alpha("lightgrey",0.8),...){
+  ii <- order(x)
+  y1 <- y1[ii]
+  y2 <- y2[ii]
+  x <- x[ii]
+  polygon(c(x,rev(x)), c(y1, rev(y2)), col=col, border=NA,...)
+}
+
+
+##################################
+##Plotting Function
+
+
+plot_arrh_rlight<- function(dfr, x){
+  nadp<- dfr#droplevels(subset(avg_dat, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "rlight")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  # the 56.1 comes from Noguchi et al 2015
+  mod3<- nlsLM(yval ~ arrh(temp,Ea, k25), start= list(Ea=56.1 , k25=1.0090246), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh(temp,Ea, k25), start= list(Ea=56.1, k25=2.5033726), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3),summary(mod4), anova (mod3,mod4)))
+}
+
+#Confidence intervals for R_LIGHT
+
+en_data<- rlight[ , c("GrowthTemp", "temp", "rlight", "plant")]
+en_data$yval<- en_data$rlight
+
+en_d<- dlply(en_data, "GrowthTemp")
+
+T14 <- bootarrh14(na.omit(en_d$`14C`),500)
+ci_T14 <- get_CI(T14)
+
+T25   <- bootarrh25(en_d$`25C`,500)
+ci_T25 <- get_CI(T25)
+```
+
+Fig. 2 R_{LIGHT} and ∆_{obs}
+
+```{r, Fig 2 rlight and D13C_obs}
+#dev.off() ## make all other device off
+
+pdf(file = "submission 2019/figures/fig 2 2x1 rlight Delta v2.pdf", width=3.5, height=5) ##this is to export figure with re
+
+par(mfrow=c(2,1),omi= c(0.7,1,0.1,0.1),mar=c(0,0,0,0), tcl= 0.5,
+    xpd= "NA",xaxs = "i", yaxs = "i")
+
+#Fig. 2a  rlight vs temp
+plot(rlight ~ temp,meanse_rlight,bg= alpha(COL(meanse_rlight), 0.9), pch="", cex=CEX,# CEX all subsequent parameters
+     xlab="", ylab="",las=2, xaxt= "n", yaxt= "n",ylim=c(-1,10), xlim= c(5,45))
+
+#____________________   code to plot confidence intervals for rlight ________________________________
+addpoly(ci_T25$Ci, ci_T25$ucl, ci_T25$lcl, col=alpha("dimgrey",0.6))
+addpoly(ci_T14$Ci, ci_T14$ucl, ci_T14$lcl, col=alpha("lightgrey",0.6))
+
+plot_arrh_rlight(rlight, "rlight")
+
+#____________________   End code to plot confidence intervals for rlight ________________________________
+##ad error bars
+with(meanse_rlight, arrows(temp, rlight + rlight.se, temp, 
+                           rlight - rlight.se ,code=3,angle=90,len=0.03))
+
+
+points(rlight~temp, subset(meanse_rlight, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse_rlight, GrowthTemp=="14C")), 0.9), pch=21, cex=CEX)
+points(rlight~temp, subset(meanse_rlight, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse_rlight, GrowthTemp=="25C")), 0.9), pch=21, cex=CEX)
+
+##add axis labels
+mtext(expression(paste(italic(R[light]), " (",mu, "mol ", m^-2, s^-1,")", sep= "")),
+      side= 2, line= 3, cex= 1.3)
+
+axis(1, labels = phi, tck = -0.03)
+axis(2,las=2, cex.axis=1.07, tck = -0.03) ##see las= 2 
+
+mtext("(a)", side=2, las=2, at=9.3, line=-1.5, cex= 1.3)
+
+legend(12,9, legend = c("25ºC", "14ºC"), pt.bg =  alpha(c("black", "white"),0.9),pch=21,
+       bty = 'n', cex= 1.3, ncol=1, pt.cex=1.07)
+
+#Fig. 2b  Dobs vs temp
+plot(Dobs.mean~temp,meanse3,pch= "", ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(2.4,5), xlim= c(5,45))
+
+lines(Dobs.mean~temp, subset(meanse3, GrowthTemp=="25C"))
+lines(Dobs.mean~temp, subset(meanse3, GrowthTemp=="14C"),lty=2)
+
+##ad error bars
+with(meanse3, arrows(temp, Dobs.mean + Dobs.se, temp, 
+                     Dobs.mean - Dobs.se,code=3,angle=90,len=0.03))
+
+points(Dobs.mean~temp, subset(meanse3, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")), 0.9), pch=21, cex=CEX)
+points(Dobs.mean~temp, subset(meanse3, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")), 0.9), pch=21, cex=CEX)
+
+
+axis(1, labels = T, cex.axis=1.07,tck = -0.03)
+axis(2, las=2,tck = -0.03, cex.axis=1.07, at = seq(3,5,by =0.5)) ##see las= 2 
+
+mtext("(b)", side=2, las=1.8, at=4.8, line=-1.5, cex= 1.3)
+##add axis labels
+mtext(expression(paste( Delta^13,C[obs]," (\u2030)", sep= "")),
+      side= 2, line= 3, cex = 1.3)
+
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 2.7, cex= 1.3)
+
+#dev.off()
+```
+Figure 3. The maximum *in vitro* velocity of PEPc, CA, Rubisco and PPDK (Vpmax, K_{CA}, *V*_{cmax}, *V*{PPDKmax}, respectively) for *Miscanthus* x *giganteous* grown at 14 and 25°C. *V*_{pmax}, *V*{cmax}, *V*{PPDKmax} activities were measured *in vitro* using the spectrophotometric assay method at 25°C
+
+
+
+Fig. 3a. CA
+
+```{r, Fig 3 CA pepc rubisco ppdk}
+CA <- readWorksheetFromFile("rawdata/CA/updated-CA Calculations misc22feb2016.xlsx",
+                            sheet=2,
+                            startRow=1,
+                            region= "A1:F19")
+CA <- out_KCA(CA,KCAmax)
+Kca<- summaryBy(.~ GrowthTemp+temp+plant, data=CA,FUN=c(mean), keep.names = T )
+t.test(Kca$KCAmax[c(Kca$GrowthTemp=="14C" & Kca$temp== 25)],Kca$KCAmax[c(Kca$GrowthTemp=="25C" & Kca$temp== 25)], alternative = "less")
+#t = -1.3453, df = 5.5442, p-value = 0.1155,Kca14=23.17950  Kca25=39.82708 
+boxplot(KCAmax~temp*GrowthTemp, Kca)
+meanse_Kca<- summaryBy(.~ GrowthTemp+temp, data=Kca,FUN=c(mean,se), keep.names = T )
+
+E<- readWorksheetFromFile("rawdata/Enzymes/June2019 Misc ppdk rubisco pepc.xlsx",
+                          sheet=1,
+                          startRow=1,
+                          region= "A1:M94")
+E <- E[E$include.analysis=="yes",]
+E<- summaryBy(.~ GrowthTemp + temp + plant + enzyme + extraction, data=E,FUN=c(mean), keep.names = T )
+
+pepc <- E[E$temp==25 & E$extraction=="normal ext" & E$enzyme=="pepc",]
+t.test(pepc$activity[c(pepc$GrowthTemp=="14C")],pepc$activity[c(pepc$GrowthTemp=="25C")],alternative="less")
+boxplot(activity~temp*GrowthTemp, pepc)
+meanse_pepc<- summaryBy(.~ GrowthTemp + temp, data=pepc,FUN=c(mean,se), keep.names = T )
+
+rubisco <- E[E$temp==25 & E$extraction=="normal ext" & E$enzyme=="rubisco",]
+t.test(rubisco$activity[c(rubisco$GrowthTemp=="14C")],rubisco$activity[c(rubisco$GrowthTemp=="25C")],alternative="greater")
+boxplot(activity~temp*GrowthTemp, rubisco)
+meanse_rubisco<- summaryBy(.~ GrowthTemp + temp + enzyme, data=rubisco,FUN=c(mean,se), keep.names = T )
+
+ppdk <- E[E$temp==25 & E$extraction=="ppdk powder" & E$enzyme=="ppdk",]
+ppdk_temp <- E[E$extraction=="ppdk powder" & E$enzyme=="ppdk",]
+t.test(ppdk$activity[c(ppdk$GrowthTemp=="14C")],ppdk$activity[c(ppdk$GrowthTemp=="25C")],alternative="greater")
+boxplot(activity~temp*GrowthTemp, ppdk)
+meanse_ppdk<- summaryBy(.~ GrowthTemp + temp + enzyme, data=ppdk,FUN=c(mean,se), keep.names = T )
+meanse_ppdk_temp<- summaryBy(.~ GrowthTemp + temp + enzyme, data=ppdk_temp ,FUN=c(mean,se), keep.names = T )
+
+pepc_decrease = 100*(meanse_pepc[2,5]-meanse_pepc[1,5])/meanse_pepc[2,5]
+Kca_decrease = 100*(meanse_Kca[2,3]-meanse_Kca[1,3])/meanse_Kca[2,3]
+
+rubisco_increase = 100*(meanse_rubisco[2,6]-meanse_rubisco[1,6])/meanse_rubisco[2,6]
+ppdk_increase = 100*(meanse_ppdk[2,6]-meanse_ppdk[1,6])/meanse_ppdk[2,6]
+
+  
+dodge1 = position_dodge(width = 0.7)
+dodge2 = position_dodge(width = 0.7)
+#CA
+#dev.off()
+plot = 
+  ggplot(data = meanse_Kca, aes(y = KCAmax.mean, x =GrowthTemp , fill = GrowthTemp)) +
+  geom_bar(position = "dodge", stat = "identity", width = 0.7, colour="black") +
+  theme(axis.line = element_line(color="black")) +
+  #geom_text(label=c("**","**"),vjust=-1.6, size=10)+
+  scale_fill_manual(values = c("white", "gray25")) +
+  scale_x_discrete(labels=c("14°C","25°C")) +
+  theme(panel.background = element_rect(fill = "transparent", colour = NA, linetype = 1, size = 1)) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank() ,
+        plot.background = element_rect(fill = "transparent",colour = NA))+
+  labs(y = (expression(paste( italic("K")[CA][italic(" in vitro")]," (",mu, "mol ", m^-2, s^-1,Pa^-1,")", sep= ""))))  +
+  theme(axis.text = element_text(size = 30, colour = "black"),
+        axis.title = element_text(size = 40, colour = "black")) +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_text(vjust = 1.4))+
+  theme(axis.ticks.x = element_line(size = 0.6, color = "black"),
+        axis.ticks.y = element_line(size = 0.6, color = "black")) +
+  theme(axis.ticks.length = unit(0.2, "cm"))+
+  theme(plot.margin=unit(c(1.5,1,0.8,1),"cm"))+ #top,right,bottom,left
+  theme(legend.position = "none") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 80))+
+  geom_errorbar(aes(ymin = KCAmax.mean -  KCAmax.se, ymax =  KCAmax.mean + KCAmax.se), colour = "black", 
+                position = dodge1, lwd = 1, width = 0.1, linetype = "solid")+
+  geom_point(y=c(15,20), x=Kca$GrowthTemp)
+
+pdf(file = "submission 2019/figures/fig 3 1x1 Kca vitro 0.2.pdf", bg= "transparent") ##this is to export figure with re
+print(plot)
+#dev.off()
+```
+Fig. 3b PEPC *in vitro* activity
+
+```{r, Fig. 3b pepc in vitro activity}
+plot = 
+  ggplot(data = meanse_pepc, aes(y = activity.mean, x =GrowthTemp , fill = GrowthTemp)) +
+  geom_bar(position = "dodge", stat = "identity", width = 0.7, colour="black") +
+  geom_text(label=c("*","*"),vjust=-2, size=10)+
+  scale_fill_manual(values = c("white", "gray25")) +
+  scale_x_discrete(labels=c("14°C","25°C"))+
+  theme(panel.background = element_rect(fill = "transparent", colour = NA, linetype = 1, size = 1)) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank() ,
+        plot.background = element_rect(fill = "transparent",colour = NA))+
+  labs(y = (expression(paste( italic("V")[pmax]," (",mu, "mol ", m^-2, s^-1,")",sep= ""))),
+       x = (expression(paste("Growth temperature", " (" ^o,"C",")", sep= "")))) + 
+  theme(axis.text = element_text(size = 30, colour = "black"),
+        axis.title = element_text(size = 40, colour = "black")) +
+  #theme(axis.text.x = element_text(angle = 0, hjust = 1))+
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_text(vjust = 1.4)) +
+  theme(axis.ticks.x = element_line(size = 0.6, color = "black"),
+        axis.ticks.y = element_line(size = 0.6, color = "black")) +
+  theme(axis.ticks.length = unit(0.2, "cm"))+
+  theme(plot.margin=unit(c(1.5,1,0.8,1),"cm"))+ #top,right,bottom,left
+  theme(legend.position = "none")+
+  theme(axis.line = element_line(color="black"))+
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 600))+
+  geom_errorbar(aes(ymin = meanse_pepc$activity.mean - meanse_pepc$activity.se, ymax = meanse_pepc$activity.mean + meanse_pepc$activity.se), colour = "black", 
+                position = dodge1, lwd = 1, width = 0.1, linetype = "solid")
+
+pdf(file = "submission 2019/figures/fig 3 1x1 pepc vitro 0.2.pdf") ##this is to export figure with re
+print(plot)
+#dev.off()
+```
+Fig. 3c Rubisco *in vitro* activity
+```{r, Fig. 3c pepc in vitro activity}
+#Rubisco
+plot = 
+  ggplot(data = meanse_rubisco, aes(y = activity.mean, x =GrowthTemp , fill = GrowthTemp)) +
+  geom_bar(position = "dodge", stat = "identity", width = 0.7, colour="black") +
+  theme(axis.line = element_line(color="black")) +
+  geom_text(label=c("*","*"),vjust=-1.6, size=10)+
+  scale_fill_manual(values = c("white", "gray25")) +
+  scale_x_discrete(labels=c("14°C","25°C")) +
+  theme(panel.background = element_rect(fill = "transparent", colour = NA, linetype = 1, size = 1)) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank() ,
+        plot.background = element_rect(fill = "transparent",colour = NA))+
+  labs(y = (expression(paste( italic("V")[cmax]," (",mu, "mol ", m^-2, s^-1,")", sep= "")))) + 
+  theme(axis.text = element_text(size = 30, colour = "black"),
+        axis.title = element_text(size = 40, colour = "black")) +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_text(vjust = 1.4))+
+  theme(axis.ticks.x = element_line(size = 0.6, color = "black"),
+        axis.ticks.y = element_line(size = 0.6, color = "black")) +
+  theme(axis.ticks.length = unit(0.2, "cm"))+
+  theme(plot.margin=unit(c(1.5,1,0.8,1),"cm"))+ #top,right,bottom,left
+  theme(legend.position = "none") +
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 80))+
+  geom_errorbar(aes(ymin = meanse_rubisco$activity.mean - meanse_rubisco$activity.se, ymax =  meanse_rubisco$activity.mean + meanse_rubisco$activity.se), colour = "black", 
+                position = dodge1, lwd = 1, width = 0.1, linetype = "solid")
+
+
+pdf(file = "submission 2019/figures/fig 3 1x1 rubisco vitro 0.2.pdf", bg= "transparent") ##this is to export figure with re
+print(plot)
+#dev.off()
+```
+
+Fig. 3d PPDK *in vitro* activity
+```{r, Fig. 3c ppdk *in vitro* activity }
+meanse_ppdk_temp$tg <- c("14C14", "14C25", "25C25")
+
+plot = 
+  ggplot(data = meanse_ppdk_temp, aes(y = activity.mean, x =tg , fill = GrowthTemp)) +
+  geom_bar(position = "dodge", stat = "identity", width = 0.7, colour="black") +
+  geom_text(label=c("*","*","*"),vjust=-1.6, size=10) +
+  scale_fill_manual(values = c("white", "gray25", "white")) +
+  theme(panel.background = element_rect(fill = "transparent", colour = NA, linetype = 1, size = 1)) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank() ,
+        plot.background = element_rect(fill = "transparent",colour = NA)) +
+  labs(y = (expression(paste( italic("V")[ppdkmax]," (",mu, "mol ", m^-2, s^-1,")", sep= "")))) + 
+  theme(axis.text = element_text(size = 30, colour = "black"),
+        axis.title = element_text(size = 40, colour = "black")) +
+  theme(axis.title.x = element_blank() ,
+        axis.title.y = element_text(vjust = 1.4)) +
+  theme(axis.ticks.x = element_line(size = 0.6, color = "black"),
+        axis.ticks.y = element_line(size = 0.6, color = "black")) +
+  theme(axis.ticks.length = unit(0.2, "cm")) +
+  theme(plot.margin=unit(c(1.5,1,0.8,1),"cm")) + #top,right,bottom,left
+  #theme(legend.position = "none") +
+  scale_x_discrete(labels=c("14°C","14°C","25°C")) +
+  theme(axis.line = element_line(color="black"))+
+  scale_y_continuous(expand = c(0, 0), limits = c(0, 80))+
+  geom_errorbar(aes(ymin = meanse_ppdk_temp$activity.mean - meanse_ppdk_temp$activity.se, ymax =  meanse_ppdk_temp$activity.mean + meanse_ppdk_temp$activity.se), colour = "black", 
+                position = dodge1, lwd = 1, width = 0.1, linetype = "solid")
+
+pdf(file = "submission 2019/figures/fig 3 1x1 ppdk vitro 0.2.pdf") ##this is to export figure in pdf
+print(plot)
+#dev.off()
+
+```
+
+
+
+```{r, functions/arrh_gm, echo = FALSE}
+#____________________    Code to get confidence intervals for gm CA non lim ___________________________________
+
+
+#Fig 4 g_m CA_{sat}, CA_{lim}, CA+PPDKlim
+
+COL<- function(meanse3){ifelse(meanse3$GrowthTemp=="14C", "white", "black")} #codifies open symbols for 14C GrowthTemp and close symbols for 25C 
+
+arrh_mod<-function(x,Ea,dS,k25,Hd){
+  R<- 0.008317 ## unit for KJ per mol per K
+  #Hd<- 200
+  Tk<- x+273.15
+  A<- exp ( Ea*(Tk-298.15)/(298.15*R*Tk) )
+  B<- 1+exp(((298.15*dS)-Hd)/(298.15*R))
+  C<- 1+exp(((Tk*dS)-Hd)/(Tk*R))
+  D<- B/C
+  k25*A*D
+}
+
+
+arrh_T<-function(temp,Ea=63.8,dS=1.2,k25= 3.7295521, Hd=366.8){
+  R<- 0.008317 ## unit for KJ per mol per K
+  #Hd<- 200
+  Tk<- temp+273.15
+  A<- exp ( Ea*(Tk-298.15)/(298.15*R*Tk) )
+  B<- 1+exp(((298.15*dS)-Hd)/(298.15*R))
+  C<- 1+exp(((Tk*dS)-Hd)/(Tk*R))
+  D<- B/C
+  yval<- k25*A*D
+  df<- data.frame(yval= yval, temp= temp, Ea=Ea,dS=dS,k25=k25, Hd= Hd)
+  return(df)
+}
+###
+fit_arrh25<- function(dat, varnames = list(yval = "gmPa", temp = "temp"))
+{ 
+  arrh_wrap <- function(temp, ...) {
+    r <- arrh_T(temp= temp,...)
+    r$yval}
+  
+  nlsfit <- nlsLM(yval ~ arrh_wrap(temp, Ea=Ea,dS=dS,k25=k25, Hd=Hd),data = dat, start = list(Ea= 82, dS=0.4, k25=2.8, Hd=117))
+  p <- coef(nlsfit)
+  
+  arrhrun <- arrh_T(temp = dat$temp,  Ea= p[[1]],  dS = p[[2]], k25= p[[3]], Hd = p[[4]])
+  
+  arrhrun$Ymeas <- dat$yval
+  arrhrun$temp <- dat$temp
+  names(arrhrun)[names(arrhrun) == "yval"] <- "Ymodel"
+  avars <- match(c("temp", "Ymeas", "Ymodel"), names(arrhrun))
+  arrhrun <- arrhrun[, c(avars, setdiff(1:ncol(arrhrun), avars))]
+  
+  
+  l <- list()
+  l$df <- arrhrun[order(arrhrun$temp), ]
+  l$pars <- summary(nlsfit)$coefficients[, 1:2]
+  l$nlsfit <- nlsfit
+  formals(arrh_T)$temp<- mean(dat$temp)
+  formals(arrh_T)$Ea <- l$pars[1]
+  formals(arrh_T)$dS <- l$pars[2]
+  formals(arrh_T)$k25 <- l$pars[3]
+  formals(arrh_T)$Hd <- l$pars[4]
+  l$arrh_T <- arrh_T
+  
+  class(l)<- "arrhfit"
+  return(l)
+}
+
+
+fit_arrh14<- function(dat, varnames = list(yval = "gmPa", temp = "temp"))
+{ 
+  arrh_wrap <- function(temp, ...) {
+    r <- arrh_T(temp= temp,...)
+    r$yval}
+  #Initial values for Vcmax in Lin et al, 2011
+  nlsfit <- nlsLM(yval ~ arrh_wrap(temp, Ea=Ea,dS=dS,k25=k25, Hd=Hd),data = dat, start = list(Ea= 71, dS=0.4, k25=2.9, Hd=109))
+            
+  p <- coef(nlsfit)
+  
+  arrhrun <- arrh_T(temp = dat$temp,  Ea= p[[1]],  dS = p[[2]], k25= p[[3]], Hd= p[[4]])
+  
+  arrhrun$Ymeas <- dat$yval
+  arrhrun$temp <- dat$temp
+  names(arrhrun)[names(arrhrun) == "yval"] <- "Ymodel"
+  avars <- match(c("temp", "Ymeas", "Ymodel"), names(arrhrun))
+  arrhrun <- arrhrun[, c(avars, setdiff(1:ncol(arrhrun), avars))]
+  
+  
+  l <- list()
+  l$df <- arrhrun[order(arrhrun$temp), ]
+  l$pars <- summary(nlsfit)$coefficients[, 1:2]
+  l$nlsfit <- nlsfit
+  formals(arrh_T)$temp<- mean(dat$temp)
+  formals(arrh_T)$Ea <- l$pars[1]
+  formals(arrh_T)$dS <- l$pars[2]
+  formals(arrh_T)$k25 <- l$pars[3]
+  formals(arrh_T)$Hd <- l$pars[4]
+  l$arrh_T <- arrh_T
+  
+  class(l)<- "arrhfit"
+  return(l)
+}
+
+
+print.arrhfit <- function (x, ...){
+  cat("Result of arrh fit.\n\n")
+  cat("Data and predictions:\n")
+  print(x$df)
+  cat("\nEstimated parameters:\n")
+  print(x$pars)
+}
+
+#########
+bootarrh25<- function(d, nboot=500){
+  p <- list()
+  for(i in 1:nboot){
+    ii <- sample(1:nrow(d), replace=TRUE)
+    dat <- d[ii,]
+    p[[i]] <- try(fit_arrh25(dat))
+    message(i)
+  }
+  
+  q<- p[sapply(p, function(x) class(x) != "try-error")]
+  return(q)
+}
+
+bootarrh14<- function(d, nboot=500){
+  p <- list()
+  for(i in 1:nboot){
+    ii <- sample(1:nrow(d), replace=TRUE)
+    dat <- d[ii,]
+    p[[i]] <- try(fit_arrh14(dat))
+    message(i)
+  }
+  
+  q<- p[sapply(p, function(x) class(x) != "try-error")]
+  return(q)
+}
+
+###Function to estimate upper and lower CI
+get_CI<- function(b){
+  cis <- seq(10, 40, length=100)
+  phot <- matrix(ncol=100,nrow=length(b))
+  for(i in 1:length(b)){
+    phot[i,] <- b[[i]]$arrh_T(temp=cis)$yval
+  }
+  lcl <- apply(phot,2,quantile, 0.025)
+  ucl <- apply(phot,2,quantile, 0.975)
+  return(data.frame(Ci=cis, lcl=lcl, ucl=ucl))
+}
+
+## Finction to plt CI
+addpoly<-  function(x,y1,y2,col=alpha("lightgrey",0.8),...){
+  ii <- order(x)
+  y1 <- y1[ii]
+  y2 <- y2[ii]
+  x <- x[ii]
+  polygon(c(x,rev(x)), c(y1, rev(y2)), col=col, border=NA,...)
+}
+
+
+##################################
+##Plotting Function
+
+plot_arrh_ci<- function(dfr, x){
+  nadp<- dfr # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "gmPa")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 82, dS=0.4, k25=2.8, Hd=117), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 71, dS=0.4, k25=2.9, Hd=109), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci2<- function(dfr, x){
+  nadp<- avg_gm2 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "gmPa")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci3<- function(dfr, x){
+  nadp<- avg_gm3 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "gmPa")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+plot_arrh_ci4<- function(dfr, x){
+  nadp<- avg_gm4 # droplevels(subset(avg_gm, Subtype== "NADP-ME"))
+  d1 <- nadp[, c("temp", "GrowthTemp", "gmPa")]       ## call what u want from dfr
+  names(d1)[c(3)] <- c("yval")        ## redefine the vlue position so they will caryy through out function
+  df25<-droplevels(subset(d1, GrowthTemp== "25C"))          ## Subseting dfr for GrowthTemp
+  df14<-droplevels(subset(d1, GrowthTemp == "14C"))
+  
+  mod3<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.7295521, Hd=366.8), data= df25, na.action= "na.omit")
+  mod4<- nlsLM(yval ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 63.8, dS=1.2, k25=3.3156579, Hd=366.8), data= df14, na.action= "na.omit")
+  
+  anova(mod3,mod4)
+  xval<-with(df25, seq(10, 40, length.out= 500))
+  
+  lines(xval, predict(mod3, newdata = data.frame(temp= xval)),lty= 1, lwd= 2, col= "black")
+  lines(xval, predict(mod4, newdata = data.frame(temp= xval)), lty= 2,lwd= 2, col= "black")
+  return(c(summary(mod3), summary (mod4)) ) # , coef(mod3), coef(mod4)
+}
+
+
+#Temp optimum function 
+T_opt <- function (Hd =Hd,dS=dS,Ea=Ea){
+  R<-0.0083143 # KiloJules mol-1 K-1
+  Topt<- (-Hd) / ((R * log (-Ea/( Ea- Hd))) - dS)
+  Topt<- Topt - 273.15
+  return (Topt)
+}
+
+
+
+
+```
+
+Figure 4. Temperature response of mesophyll conductance (g_m) for *Miscanthus* x *giganteous* grown at 14°C (open symbols, dashed line and light grey shade) and 25°C (closed symbols, continuous line, and dark gray shade) and assuming (a) no CA or PPDK limitation (CA_{sat}), (b) using in vitro CA activity to model potential CA limitation for CO_2 hydration but assuming no PPDK limitation (CA_lim) or (c) using both *in vitro* activity of CA and PPDK to estimate their potential limitations (CA+PPDKlim), with 95% confidence intervals shown in gray. For all scenarios, g_m was estimated using the \Delta^{13}C in vitro Vpmax method following Ubierna et al., (2017). 
+
+Fig. 4 gm CA_{sat}, CA_{lim}, CA+PPDKlim
+
+```{r, Fig 4 gm CAsat, CAlim, CA+PPDKlim}
+en_data1<- gm1[ , c("GrowthTemp", "temp", "gmPa", "plant")]
+en_data1$yval<- en_data1$gmPa
+dat<- en_data1
+
+en_d1<- dlply(en_data1, "GrowthTemp")
+
+T14_1<- bootarrh14(na.omit(en_d1$`14C`),500)
+ci_T14_1 <- get_CI(T14_1)
+
+T25_1<- bootarrh25(en_d1$`25C`,500)
+ci_T25_1<- get_CI(T25_1)
+
+#____________________    Code to get confidence intervals for CA lim  ___________________________________
+en_data2<- gm2[ , c("GrowthTemp", "temp", "gmPa", "plant")]
+en_data2$yval<- en_data2$gmPa
+dat<- en_data2
+
+en_d2<- dlply(en_data2, "GrowthTemp")
+
+T14_2 <- bootarrh14(na.omit(en_d2$`14C`),500)
+ci_T14_2 <- get_CI(T14_2)
+
+T25_2   <- bootarrh25(en_d2$`25C`,500)
+ci_T25_2 <- get_CI(T25_2)
+
+#____________________    Code to get confidence intervals for gm CA CA and PPDK lim ___________________________________
+en_data3<- gm3[ , c("GrowthTemp", "temp", "gmPa", "plant")]
+en_data3$yval<- en_data3$gmPa
+dat<- en_data3
+
+en_d3<- dlply(en_data3, "GrowthTemp")
+
+T14_3 <- bootarrh14(na.omit(en_d3$`14C`),500)
+ci_T14_3 <- get_CI(T14_3)
+
+T25_3   <- bootarrh25(en_d3$`25C`,500)
+ci_T25_3 <- get_CI(T25_3)
+
+#____________________   End Code to get confidence intervals for gm CA CA and PPDK lim  ________________________________
+#dev.off() ## make all other device off
+
+pdf(file = "submission 2019/figures/fig 4 1x3 gm nonlim CAlim CAPPDKlim v2.pdf", width=7,height=3.5)
+
+
+par(mfrow=c(1,3),omi= c(0.8,1,0.3,0.1),mar=c(0,0,0,0), tcl= 0.5,#b,l,t,r
+    xpd= "NA",xaxs = "i", yaxs = "i")
+
+#__________________________________________________ Plot 4a gm CA sat ____________________________________________________________________
+temp<-c(10,15,20,25,30,35,40)
+tempk<-temp+273.15
+
+gm_Nerea14<-meanse1[4,12]*exp(35.2*(tempk-298.15)/(298.15*0.008314*tempk))
+gm_Nerea25<-meanse1[11,12]*exp(35.2*(tempk-298.15)/(298.15*0.008314*tempk))
+
+gm_Nerea<-data.frame(rep(temp,2),gm_Nerea14,gm_Nerea25)
+colnames(gm_Nerea)<-c("temp","14g","25g")
+
+#__________________________________   4.a gm CA lim model   _________________________________________
+plot(gmPa.mean~temp, meanse1,bg= alpha(COL(meanse1),0.9),pch=21, cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(0,6.5), xlim= c(5,45))
+
+#____________________  Start plot to code confidence intervals for gm ________________________________
+addpoly(ci_T25_1$Ci, ci_T25_1$ucl, ci_T25_1$lcl, col=alpha("dimgrey",0.6))
+addpoly(ci_T14_1$Ci, ci_T14_1$ucl, ci_T14_1$lcl, col=alpha("lightgrey",0.6))
+
+plot_arrh_ci(gm1, "gmPa")
+#____________________   End plot to code confidence intervals for gm  ________________________________
+
+# Fig. 4a gm CA sat
+# add error bars
+with(meanse1, arrows(temp, gmPa.mean + gmPa.se, temp, 
+                     gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+
+lines(gm_Nerea14~temp, lty=2, lwd=1, col= "grey48")
+lines(gm_Nerea25~temp, lty=1, lwd=1, col= "grey48")
+
+points(gmPa.mean~temp, subset(meanse1, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse1, GrowthTemp=="14C")),0.9), pch=21, cex=CEX)
+points(gmPa.mean~temp, subset(meanse1, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse1, GrowthTemp=="25C")),0.9), pch=21, cex=CEX)
+
+axis(1, labels = T, cex.axis=1.5, tck = 0.03)
+axis(2,labels = T,las=2, cex.axis=1.5,at = seq(0,6.3,by =2), tck = -0.03) ##see las= 2 
+
+## add graph number
+mtext("(a)", side=2, las=2, at=6, line=-2.5, cex= 1.5)
+
+##add axis labels
+mtext(expression(paste(CA[sat], sep= "")),
+      side= 3, line= 0.1, cex= 1)
+
+mtext(expression(paste(italic(g)["m"], " (", "µmol ", m^-2, s^-1, Pa^-1,")", sep= "")),
+      side= 2, line= 4, cex= 1.7)
+
+
+#__________________________________________________ Plot 4b gm CA lim ____________________________________________________________________
+plot(gmPa.mean~temp, meanse2,bg= alpha(COL(meanse2),0.9),pch="", cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(0,6.5), xlim= c(5,45))
+
+#____________________  Start plot to code confidence intervals for A ________________________________
+addpoly(ci_T25_2$Ci, ci_T25_2$ucl, ci_T25_2$lcl, col=alpha("dimgrey",0.6))
+addpoly(ci_T14_2$Ci, ci_T14_2$ucl, ci_T14_2$lcl, col=alpha("lightgrey",0.6))
+
+plot_arrh_ci(gm3, "gmPa")
+#____________________   End plot to code confidence intervals for A _________________________________
+with(meanse2, arrows(temp, gmPa.mean + gmPa.se, temp, 
+                     gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+
+lines(gm_Nerea14~temp, lty=2, lwd=1, col= "grey48")
+lines(gm_Nerea25~temp, lty=1, lwd=1, col= "grey48")
+
+points(gmPa.mean~temp, subset(meanse2, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse2, GrowthTemp=="14C")),0.9), pch=21, cex=CEX)
+points(gmPa.mean~temp, subset(meanse2, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse2, GrowthTemp=="25C")),0.9), pch=21, cex=CEX)
+
+axis(1, labels = T, cex.axis=1.5, tck = 0.03)
+axis(2,labels = phi,las=2, cex.axis=1.5,at = seq(0,6.3,by =2), tck = -0.03) ##see las= 2 
+
+## add graph number
+mtext("(b)", side=2, las=2, at=6, line=-2.5, cex= 1.5)
+
+mtext(expression(paste(CA[lim], sep= "")),
+      side= 3, line= 0.1, cex= 1)
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 3.8, cex= 1.5)
+
+
+
+#__________________________________________________ Plot 4c gm CA+ PPDKlim ____________________________________________________________________
+plot(gmPa.mean~temp, meanse3,bg= alpha(COL(meanse3),0.9),pch=21, cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(0,6.5), xlim= c(5,45))
+
+#____________________  Start plot to code confidence intervals for A ______________
+addpoly(ci_T25_3$Ci, ci_T25_3$ucl, ci_T25_3$lcl, col=alpha("dimgrey",0.6))
+addpoly(ci_T14_3$Ci, ci_T14_3$ucl, ci_T14_3$lcl, col=alpha("lightgrey",0.6))
+
+plot_arrh_ci(gm3, "gmPa")
+#____________________   End plot to code confidence intervals for A ________________
+
+with(meanse3, arrows(temp, gmPa.mean + gmPa.se, temp, 
+                     gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+
+lines(gm_Nerea14~temp, lty=2, lwd=1, col= "grey48")
+lines(gm_Nerea25~temp, lty=1, lwd=1, col= "grey48")
+
+points(gmPa.mean~temp, subset(meanse3, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")),0.9), pch=21, cex=CEX)
+points(gmPa.mean~temp, subset(meanse3, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")),0.9), pch=21, cex=CEX)
+
+axis(1, labels = T, cex.axis=1.5, tck = 0.03)
+axis(4,las=2, labels = T, cex.axis=1.5,at = seq(0,6.3,by =2), tck = -0.03) ##see las= 2 
+
+## add graph number
+mtext("(c)", side=2, las=2, at=6, line=-2.5, cex= 1.5)
+
+mtext(expression(paste("CA ", "and ", PPDK[lim], sep= "")),
+      side= 3, line=0.1, cex= 1)
+
+#dev.off()
+
+
+```
+Figure 5. Temperature response of leakiness (/phi) and (g_bs) for *Miscanthus* x *giganteous* grown at 14°C and 25° for the CA_{sat}, CA_{lim}, CA+PPDKlim models. (a) Assuming no CA or PPDK limitation (CA_sat), (b) using in vitro CA activity to model potential CA limitation for CO_2 hydration but assuming no PPDK limitation (CA_lim) or (c) using both in vitro activity of CA and PPDK to estimate their potential limitations (CA+PPDKlim). 
+
+```{r, phi calculated with the combined model using CAsat, CAlim and CA+PPDK lim}
+#___________________________   Fig 5 phi calculated with the combined model using CAsat, CAlim and CA+PPDK lim ____________________
+#dev.off() ## make all other device off
+pdf(file = "submission 2019/figures/fig 5 3x2 gbs and leakiness wo outliers v2.pdf", width = 9)
+
+#bottom,left, top, rigt
+par(mfrow = c(3,3),omi= c(0.6,0.7,0.4,0.5),mar=c(0,0,0,0), tcl= 0.5,  mgp= c(3,1,0), xaxs = "i",yaxs = "i")# xpd= "NA"#__________________________________________________ Plot 5d gbs CAsat ____________________________________________________________________
+plot(gbsPa.mean~temp, meanse1,bg = alpha(COL(meanse1)), pch="", cex = CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(-0.01, 0.4), xlim= c(5,45))
+
+##ad error bars
+with(meanse1, arrows(temp, gbsPa.mean + gbsPa.se, temp, 
+                     gbsPa.mean - gbsPa.se,code=3,angle=90,len=0.03))
+
+lines(gbsPa.mean~temp, subset(meanse1, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX)
+lines(gbsPa.mean~temp, subset(meanse1, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX)
+
+points(gbsPa.mean~temp, subset(meanse1, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse1, GrowthTemp=="25C")),0.9), pch=21, cex=CEX)
+points(gbsPa.mean~temp, subset(meanse1, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse1, GrowthTemp=="14C")),0.9), pch=21, cex=CEX)
+
+axis(1, labels = F, tck = -0.03)
+axis(2,las = 2, cex.axis=CEX, tck = -0.03, at = seq(0.1,0.3,by =0.1)) ##see las= 2  
+axis(4,labels = F,las=2, cex.axis=CEX, tck = -0.03, at = seq(0.1, 0.3,by =0.1)) ##see las= 2  
+
+mtext(expression(paste(italic(g)["bs"], " (", "µmol ", m^-2, s^-1, Pa^-1,")", sep= "")),
+      side= 2, line= 3, cex= CEX)
+
+## add graph letter
+mtext("(a)", side=2, las=2, at=0.36, line=-2.5, cex= CEX)
+
+mtext(expression(paste (CA["sat"])),
+      side= 3, line=0.1, cex= CEX)
+
+
+
+
+#__________________________________________________ Plot 5e gbs CAlim ____________________________________________________________________
+plot(gbsPa.mean~temp, meanse2,bg= alpha(COL(meanse2),0.9), pch="", cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(-0.01, 0.4), xlim= c(5,45))
+
+##ad error bars
+with(meanse2, arrows(temp, gbsPa.mean + gbsPa.se, temp, 
+                     gbsPa.mean - gbsPa.se,code=3,angle=90,len=0.03))
+
+lines(gbsPa.mean~temp, subset(meanse2, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse2),0.9), cex=CEX)
+lines(gbsPa.mean~temp, subset(meanse2, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse2),0.9), cex=CEX)
+
+points(gbsPa.mean~temp, subset(meanse2, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse2, GrowthTemp=="25C")),0.9), pch=21, cex=CEX)
+points(gbsPa.mean~temp, subset(meanse2, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse2, GrowthTemp=="14C")),0.9), pch=21, cex=CEX)
+
+axis(1, labels = F, tck = -0.03)
+axis(2,labels= F, las=2, cex.axis=CEX, tck = -0.03, at = seq(0.1,0.4,by =0.1)) ##see las= 2  
+axis(4,labels= F,las=2, cex.axis=CEX, tck = -0.03, at = seq(0.1,0.4,by =0.1)) ##see las= 2  
+
+## add graph letter
+mtext("(b)", side=2, las=2, at = 0.36, line=-2.5, cex= CEX)
+
+legend(25,0.9, legend = c("25 ºC", "14 ºC"), pt.bg =  alpha(c("black", "white"),0.9),pch=21,
+       bty = 'n', cex= 1.3, ncol=1, pt.cex=CEX)
+
+mtext(expression(paste (CA["lim"])),
+      side= 3, line= 0.1, cex= CEX)
+
+
+#__________________________________________________ Plot 5f gbs CA+PPDKlim ____________________________________________________________________
+
+plot(gbsPa.mean~temp, meanse3,bg= alpha(COL(meanse3),0.9), pch="", cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(-0.01,0.4), xlim= c(5,45))
+
+##ad error bars
+with(meanse3, arrows(temp, gbsPa.mean + gbsPa.se, temp, 
+                     gbsPa.mean - gbsPa.se,code=3,angle=90,len=0.03))
+
+lines(gbsPa.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse3),0.9), cex=CEX)
+lines(gbsPa.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse3),0.9), cex=CEX)
+
+points(gbsPa.mean~temp, subset(meanse3, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")),0.9), pch=21, cex=CEX)
+points(gbsPa.mean~temp, subset(meanse3, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")),0.9), pch=21, cex=CEX)
+
+axis(1, labels = F, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(2,labels= F, las=2, cex.axis=CEX, tck = -0.03, at = seq(0.1, 0.3, by =0.1)) ##see las= 2  
+axis(4,labels= T,las=2, cex.axis=CEX, tck = -0.03, at = seq(0.1, 0.3, by =0.1)) ##see las= 2  
+
+mtext("(c)", side=2, las=2, at=0.36, line=-2.5, cex= CEX)
+
+mtext(expression(paste (CA+PPDK["lim"])),
+      side= 3, line=0.1, cex= CEX)
+
+
+#__________________________________________________ Plot 5a phi CA+ PPDKlim ____________________________________________________________________
+
+#Figure 9.1 CA sat
+plot(Cbs.mean~temp, meanse1, type = "n", cex=CEX, 
+     ylab = "", xlab = "",las=2, xaxt = "n", yaxt= "n", xlim = c(5,45), ylim= c(0,2400))
+
+##ad error bars
+with(subset(meanse1, GrowthTemp=="14C"), arrows(temp, Cbs.mean + Cbs.se, temp, 
+                                                Cbs.mean - Cbs.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse1, GrowthTemp=="25C"), arrows(temp, Cbs.mean + Cbs.se, temp, 
+                                                Cbs.mean - Cbs.se,code=3,angle=90,len=0.03))
+
+# a. 14C
+lines(Cbs.mean~temp, subset(meanse1, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX)
+points(Cbs.mean~temp, subset(meanse1, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(Cbs.mean~temp, subset(meanse1, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX)
+points(Cbs.mean~temp, subset(meanse1, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="25C")),0.9),cex=CEX)
+
+
+##axis
+axis(1, labels = F, tck = -0.03, cex.axis=CEX)#mgp=c(3, .8, 0),
+axis(2,las=2, cex.axis=CEX, tck = -0.03, at = seq(500,2000,by = 500)) ##see las= 2  
+axis(4,labels = F, las=2, cex.axis=CEX, tck = -0.03, at = seq(500,2000,by = 500)) ##see las= 2  
+
+## add graph letter
+mtext("(d)", side=2, las=2, at = 2100, line=-2.5, cex= CEX)
+
+mtext(expression(paste( Cbs, " ( ", Pa," )", sep= "")),
+      side= 2, line= 3, cex= CEX)
+
+#__________________________________________________ Plot 5b phi CAlim ____________________________________________________________________
+plot(Cbs.mean~temp, meanse2, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45), ylim= c(0,2400))
+
+##ad error bars
+with(subset(meanse2, GrowthTemp=="14C"), arrows(temp, Cbs.mean + Cbs.se, temp, 
+                                                Cbs.mean - Cbs.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse2, GrowthTemp=="25C"), arrows(temp, Cbs.mean + Cbs.se, temp, 
+                                                Cbs.mean - Cbs.se,code=3,angle=90,len=0.03))
+
+lines(Cbs.mean~temp, subset(meanse2, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse2),0.9), cex=CEX)
+points(Cbs.mean~temp, subset(meanse2, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse2, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(Cbs.mean~temp, subset(meanse2, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse2),0.9), cex=CEX)
+points(Cbs.mean~temp, subset(meanse2, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse2, GrowthTemp=="25C")),0.9),cex=CEX)
+##axis
+axis(1, labels = F, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(2,labels= F, las=2, cex.axis=CEX, tck = -0.03, at = seq(500,2000,by = 500)) ##see las= 2  
+axis(4,labels= F,las=2, cex.axis=CEX, tck = -0.03, at = seq(500,2000,by = 500)) ##see las= 2  
+
+## add graph letter
+mtext("(e)", side = 2, las=2, at = 2100, line = -2.5, cex= CEX)
+
+
+
+#__________________________________________________ Plot 5c phi CA+PPDKlim ____________________________________________________________________
+plot(Cbs.mean~temp, meanse3, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45), ylim= c(0,2400))
+
+##ad error bars
+with(subset(meanse3, GrowthTemp=="14C"), arrows(temp, Cbs.mean + Cbs.se, temp, 
+                                                Cbs.mean - Cbs.se,code=3,angle=90,len=0.03))
+with(subset(meanse3, GrowthTemp=="25C"), arrows(temp, Cbs.mean + Cbs.se, temp, 
+                                                Cbs.mean - Cbs.se,code=3,angle=90,len=0.03))
+lines(Cbs.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse3),0.9), cex=CEX)
+points(Cbs.mean~temp, subset(meanse3, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(Cbs.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse3),0.9), cex=CEX)
+points(Cbs.mean~temp, subset(meanse3, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")),0.9),cex=CEX)
+
+##axis
+axis(1, labels = F, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(2,labels= F,las=2, cex.axis=CEX, tck = -0.03, at = seq(500,2000,by = 500)) ##see las= 2  
+axis(4,las=2, cex.axis=CEX, tck = -0.03, at = seq(500,2000,by = 500)) ##see las= 2  
+
+## add graph letter
+mtext("(e)", side=2, las = 2, at = 2100, line = -2.5, cex= CEX)
+
+
+
+
+#Figure 9.1 CA sat
+plot(phi.mean~temp, meanse1, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45),ylim= c(-0.01,1))
+
+##ad error bars
+with(subset(meanse1, GrowthTemp=="14C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse1, GrowthTemp=="25C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+
+# a. 14C
+lines(phi.mean~temp, subset(meanse1, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX, lty=2)
+points(phi.mean~temp, subset(meanse1, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(phi.mean~temp, subset(meanse1, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX)
+points(phi.mean~temp, subset(meanse1, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="25C")),0.9),cex=CEX)
+
+
+##axis
+axis(1, labels = T, tck = -0.03, cex.axis=CEX)#mgp=c(3, .8, 0),
+axis(2,las=2, cex.axis=CEX, tck = -0.03, at = seq(0.2,0.9,by =0.2)) ##see las= 2  
+axis(4,labels = F, las=2, cex.axis=CEX, tck = -0.03, at = seq(0.2,0.9,by =0.2)) ##see las= 2  
+
+## add graph letter
+mtext("(g)", side=2, las=2, at=0.9, line=-2.5, cex= CEX)
+
+mtext(expression(paste (phi)),
+      side= 2, line= 3, cex= CEX)
+
+mtext(expression(paste (CA["sat"])),
+      side= 3, line=0.1, cex= CEX)
+
+#__________________________________________________ Plot 5b phi CAlim ____________________________________________________________________
+plot(phi.mean~temp, meanse2, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45), ylim= c(-0.01, 1))
+
+##ad error bars
+with(subset(meanse2, GrowthTemp=="14C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse2, GrowthTemp=="25C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+
+lines(phi.mean~temp, subset(meanse2, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse2),0.9), cex=CEX, lty=2)
+points(phi.mean~temp, subset(meanse2, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse2, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(phi.mean~temp, subset(meanse2, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse2),0.9), cex=CEX)
+points(phi.mean~temp, subset(meanse2, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse2, GrowthTemp=="25C")),0.9),cex=CEX)
+##axis
+axis(1, labels = T, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(2,labels= F, las=2, cex.axis=CEX, tck = -0.03, at = seq(0.2,0.9,by =0.2)) ##see las= 2  
+axis(4,labels= F,las=2, cex.axis=CEX, tck = -0.03, at = seq(0.2,0.9,by =0.2)) ##see las= 2  
+
+## add graph letter
+mtext("(h)", side=2, las=2, at=0.9, line=-2.5, cex= CEX)
+
+mtext(expression(paste (CA["lim"])),
+      side= 3, line= 0.1, cex= CEX)
+
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 3, cex= CEX)
+
+#__________________________________________________ Plot 5c phi CA+PPDKlim ____________________________________________________________________
+plot(phi.mean~temp, meanse3, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45),ylim= c(-0.01, 1))
+
+##ad error bars
+with(subset(meanse3, GrowthTemp=="14C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+with(subset(meanse3, GrowthTemp=="25C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+lines(phi.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse3),0.9), cex=CEX, lty=2)
+points(phi.mean~temp, subset(meanse3, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(phi.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse3),0.9), cex=CEX)
+points(phi.mean~temp, subset(meanse3, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")),0.9),cex=CEX)
+
+##axis
+axis(1, labels = T, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(2,labels= F,las=2, cex.axis=CEX, tck = -0.03, at = seq(0.2,0.9,by =0.2)) ##see las= 2  
+axis(4,las=2, cex.axis=CEX, tck = -0.03, at = seq(0.2,0.9,by =0.2)) ##see las= 2  
+
+## add graph letter
+mtext("(i)", side=2, las=2, at=0.9, line=-2.5, cex= CEX)
+
+mtext(expression(paste (CA+PPDK["lim"])),
+      side= 3, line=0.1, cex= CEX)
+
+#dev.off()
+```
+Fig. S1 Rubisco and PPDK horizontal
+
+```{r, Fig S1 Rubisco and PPDK horizontal}
+CEX=1   ##define size of points
+#dev.off() ## make all other device off
+pdf(file = "submission 2019/figures/fig S1 1x2 ppdk rubisco and asat vs temp v2.pdf",  width=7, height=3.5) ##this is to export figure with re
+
+par(mfrow=c(1,2),omi= c(0.6,0.75,0.1,0.85),mar=c(0,0,0,0), tcl= 0.5,  mgp= c(3,0.5,0),
+    xpd= "NA",xaxs = "i", yaxs = "i")
+
+#_________________________________   PPDK and Asat vs temp _________________________________________________
+plot(Asat.mean~temp, meanse_Asat,bg= alpha(COL(meanse_Asat),0.9), pch="", cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(0,270), xlim= c(5,45))
+##ad error bars
+with(meanse_rubisco, arrows(temp, activity.mean + activity.se, temp, 
+                            activity.mean - activity.se,code=3,angle=90,len=0.03))
+
+with(meanse_Asat, arrows(temp, Asat.mean + Asat.se, temp, 
+                         Asat.mean - Asat.se,code=3,angle=90,len=0.03))
+
+lines(Asat.mean~temp,subset(meanse_Asat, GrowthTemp=="14C"), lty=2)
+lines(Asat.mean~temp,subset(meanse_Asat, GrowthTemp=="25C"))
+
+vcmax14g<-meanse_rubisco[1,6]*exp(53.4*(tempk-298.15)/(298.15*0.008314*tempk))
+Vcmax25g<-meanse_rubisco[2,6]*exp(53.4*(tempk-298.15)/(298.15*0.008314*tempk))
+
+lines(vcmax14g~temp, lty=2)
+lines(Vcmax25g~temp)
+
+points(Asat.mean~temp, subset(meanse_Asat, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse_Asat, GrowthTemp=="14C")),0.9), pch=21, cex= CEX)
+points(Asat.mean~temp, subset(meanse_Asat, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse_Asat, GrowthTemp=="25C")), 0.9), pch=21, cex= CEX)
+
+points(activity.mean~temp, meanse_rubisco,bg= alpha(COL(meanse_rubisco),0.9),pch=22, cex=CEX,
+       ylab="", xlab="",las=2, xaxt= "n", yaxt= "n")
+
+axis(1, labels = T, tck = -0.03)
+axis(2, labels = T , at = seq(0,260,by =50),las=2, cex.axis=1.2, tck = -0.03)
+
+## add graph number
+mtext("(a)", side=2, las=2, at=250, line=-2, cex= 1.5)
+
+mtext(expression(paste(V[cmax], " (",mu, "mol ", m^-2, s^-1,")", sep= "")),
+      side= 2, line= 2.2, cex= 1.1)
+
+## add legend to the plot
+legend(10,245, legend = c( "25 ºC","14 ºC"), pt.bg =  alpha(c( "black","white"),0.8),pch=21,
+       bty = 'n', cex= 1.2, ncol=1, pt.cex=CEX)
+
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, at= 45, line= 2.08, cex= 1.3)
+
+
+## ppdk vs temp
+plot(Asat.mean~temp, meanse_Asat,bg= alpha(COL(meanse_Asat),0.9), pch="", cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(0,270), xlim= c(5,45))
+
+##ad error bars
+with(meanse_rubisco, arrows(temp, activity.mean + activity.se, temp, 
+                            activity.mean - activity.se,code=3,angle=90,len=0.03))
+
+with(meanse_Asat, arrows(temp, Asat.mean + Asat.se, temp, 
+                         Asat.mean - Asat.se,code=3,angle=90,len=0.03))
+
+lines(Asat.mean~temp,subset(meanse_Asat, GrowthTemp=="14C"), lty=2)
+lines(Asat.mean~temp,subset(meanse_Asat, GrowthTemp=="25C"))
+
+#Finding Ea
+R=0.008314
+k1=meanse_ppdk_temp[1,6]
+k2=meanse_ppdk_temp[2,6]#58.18438
+T1=14+273.15
+T2=25+273.15
+
+Ea = (R*(log(k2/k1)))/((1/T1)-(1/T2))#58.18438
+
+ppdkmax14g = meanse_ppdk[1,6]*exp(Ea*(tempk-298.15)/(298.15*R*tempk))
+ppdkmax25g = meanse_ppdk[2,6]*exp(Ea*(tempk-298.15)/(298.15*R*tempk))
+
+lines(ppdkmax14g~temp, lty=2)
+lines(ppdkmax25g~temp)
+
+points(activity.mean~temp, meanse_ppdk,bg= alpha(COL(meanse_ppdk),0.9),pch=22, cex=CEX,
+       ylab="", xlab="",las=2, xaxt= "n", yaxt= "n")
+
+points(Asat.mean~temp, subset(meanse_Asat, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse_Asat, GrowthTemp=="14C")),0.9), pch=21, cex= CEX)
+points(Asat.mean~temp, subset(meanse_Asat, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse_Asat, GrowthTemp=="25C")), 0.9), pch=21, cex= CEX)
+
+axis(1, labels = T, cex.axis=1.2, tck = -0.03)
+axis(4, labels = T , at = seq(0,260,by =50),las=2, cex.axis=1.2, tck = -0.03)
+
+## add graph number
+mtext("(b)", side=2, las=2, at=250, line=-2, cex= 1.5)
+
+## add legend to the plot
+legend(10,245, legend = c( "25 ºC","14 ºC"), pt.bg =  alpha(c( "black","white"),0.8),pch=22,
+       bty = 'n', cex= 1.2, ncol=1, pt.cex=CEX)
+
+mtext(expression(paste(PPDK[max], " (",mu, "mol ", m^-2, s^-1,")", sep= "")),
+      side= 4, line= 3, cex= 1.1)
+
+#dev.off()
+
+```
+
+
+Fig S2 phi 4 models split by GrowthTemp
+
+
+```{r, Fig S2 phi 4 models split by GrowthTemp}
+#__________________________   ____________________
+#dev.off() ## make all other device off
+
+pdf(file = "submission 2019/figures/fig S3 2x1 phi 4 models split by GrowthTemp v2.pdf", width =7, height =3.5 )
+
+par(mfrow=c(1,2),omi= c(0.7,0.6,0.1,0.42),mar=c(0,0,0,0), tcl= 0.5,  mgp= c(3,0.5,0),#bltr
+    xpd= "NA",xaxs = "i", yaxs = "i")
+#_________________________________  Leakiness _________________________________________________
+plot(phi.mean~temp, meanse1, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45),ylim= c(0.0,1.1))
+
+##ad error bars
+with(subset(meanse1, GrowthTemp=="14C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+with(subset(meanse2, GrowthTemp=="14C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+with(subset(meanse3, GrowthTemp=="14C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+with(subset(meanse3, GrowthTemp=="14C"), arrows(temp, phi_SvC_2014.mean + phi_SvC_2014.se, temp, 
+                                                phi_SvC_2014.mean - phi_SvC_2014.se,code=3,angle=90,len=0.03))
+# a. 14C
+lines(phi.mean~temp, subset(meanse1, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX, lty=2)
+points(phi.mean~temp, subset(meanse1, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(phi.mean~temp, subset(meanse2, GrowthTemp=="14C"), pch=22, bg= alpha(COL(meanse2),0.9), cex=CEX, lty=2)
+points(phi.mean~temp, subset(meanse2, GrowthTemp=="14C"),pch=22, bg= alpha(COL(subset(meanse2, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(phi.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=23, bg= alpha(COL(meanse3),0.9), cex=CEX, lty=2)
+points(phi.mean~temp, subset(meanse3, GrowthTemp=="14C"),pch=23, bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(phi_SvC_2014.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=24, bg= alpha(COL(meanse3),0.9), cex=CEX, lty=2)
+points(phi_SvC_2014.mean~temp, subset(meanse3, GrowthTemp=="14C"),pch=24, bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")),0.9),cex=CEX)
+
+
+axis(1, labels = T, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(4, labels = F, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(2,      las=2, tck = -0.03, mgp=c(3, .5, 0),cex.axis= CEX)#, at = seq(0.1,1,by =0.2)) ##see las= 2  
+
+## add graph letter
+mtext("(a)", side=2, las=2, at=1, line=-2.5, cex= CEX)
+
+legend(18,1.1, legend = c(expression(CA[sat]),
+                          expression(CA[lim]), 
+                          expression(CA+PPDK[lim]),
+                          "von Caemmerer et al. (2014)"), 
+       pt.bg =  alpha(c("white"),0.9), pch=c(21,22,23,24),
+       bty = 'n', cex= 0.75, ncol=1, pt.cex=0.75)
+
+mtext(expression(paste (phi)),
+      side= 2, line= 1.8, cex= CEX)
+
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 2.3, cex= CEX, at =45)
+
+#CA lim gm non infinite
+plot(phi.mean~temp, meanse2, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45), ylim= c(0.0,1.1))
+
+##ad error bars
+with(subset(meanse1, GrowthTemp=="25C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse2, GrowthTemp=="25C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse3, GrowthTemp=="25C"), arrows(temp, phi.mean + phi.se, temp, 
+                                                phi.mean - phi.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse3, GrowthTemp=="25C"), arrows(temp, phi_SvC_2014.mean + phi_SvC_2014.se, temp, 
+                                                phi_SvC_2014.mean - phi_SvC_2014.se,code=3,angle=90,len=0.03))
+
+lines(phi.mean~temp, subset(meanse1, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX)
+points(phi.mean~temp, subset(meanse1, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="25C")),0.9),cex=CEX)
+
+lines(phi.mean~temp, subset(meanse2, GrowthTemp=="25C"), pch=22, bg= alpha(COL(meanse2),0.9), cex=CEX)
+points(phi.mean~temp, subset(meanse2, GrowthTemp=="25C"),pch=22, bg= alpha(COL(subset(meanse2, GrowthTemp=="25C")),0.9),cex=CEX)
+
+lines(phi.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=23, bg= alpha(COL(meanse3),0.9), cex=CEX)
+points(phi.mean~temp, subset(meanse3, GrowthTemp=="25C"),pch=23, bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")),0.9),cex=CEX)
+
+lines(phi_SvC_2014.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=24, bg= alpha(COL(meanse3),0.9), cex=CEX)
+points(phi_SvC_2014.mean~temp, subset(meanse3, GrowthTemp=="25C"),pch=24, bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")),0.9),cex=CEX)
+
+
+axis(1, labels = T, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(4,las=2, cex.axis=CEX, tck = -0.03,mgp=c(3, .5, 0))#, at = seq(0.1,1,by =0.2)) ##see las= 2  
+
+## add graph letter
+mtext("(b)", side=2, las=2, at=1, line=-2.5, cex= CEX)
+legend(18,1.1, legend = c(expression(CA[sat]),
+                          expression(CA[lim]), 
+                          expression(CA+PPDK[lim]),
+                          "von Caemmerer et al. (2014)"), 
+       pt.bg =  alpha(c("black"),0.9), pch=c(21,22,23,24),
+       bty = 'n', cex= 0.75, ncol=1, pt.cex=0.75)
+
+#dev.off()
+
+```
+
+
+Fig S3 *V*_p and *V*_{pr} splitted by GrowthTemp
+
+```{r, Fig S3 Vp and Vpr splitted by GrowthTemp}
+
+#dev.off() ## make all other device off
+
+pdf(file = "submission 2019/figures/fig S4 2x1 Vp and Vpr 3 models split by GrowthTemp v2.pdf", width=7,height=3 )
+
+par(mfrow=c(1,2),omi= c(0.7,0.7,0.2,0.7),mar=c(0,0,0,0), tcl= 0.5,  mgp= c(2,0,0),
+    xpd= "NA",xaxs = "i", yaxs = "i")
+
+# ____________________________   Vp   _________________________________
+# ______________________ plot Vp for different meanses
+plot(Vpr.mean~temp, subset(meanse3, GrowthTemp=="14C"), type="l", lty= 2, cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45),ylim= c(0,260))
+
+##ad error bars
+with(subset(meanse1, GrowthTemp=="14C"), arrows(temp, Vp.mean + Vp.se, temp, 
+                                                Vp.mean - Vp.se,code=3,angle=90,len=0.03))
+with(subset(meanse2, GrowthTemp=="14C"), arrows(temp, Vp.mean + Vp.se, temp, 
+                                                Vp.mean - Vp.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse3, GrowthTemp=="14C"), arrows(temp, minVp.mean + minVp.se, temp, 
+                                                minVp.mean - minVp.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse3, GrowthTemp=="14C"), arrows(temp, Vp_SvC_2014.mean + Vp_SvC_2014.se, temp, 
+                                                Vp_SvC_2014.mean - Vp_SvC_2014.se,code=3,angle=90,len=0.03))
+
+# a. 14C
+lines(Vp.mean~temp, subset(meanse1, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse1)), cex=CEX)
+points(Vp.mean~temp, subset(meanse1, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="14C"))),cex=CEX)
+
+lines(Vp.mean~temp, subset(meanse2, GrowthTemp=="14C"), pch=22, bg= alpha(COL(meanse2)), cex=CEX)
+points(Vp.mean~temp, subset(meanse2, GrowthTemp=="14C"),pch=22, bg= alpha(COL(subset(meanse2, GrowthTemp=="14C"))),cex=CEX)
+
+lines(minVp.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=23, bg= alpha(COL(meanse3)), cex=CEX)
+points(minVp.mean~temp, subset(meanse3, GrowthTemp=="14C"),pch=23, bg= alpha(COL(subset(meanse3, GrowthTemp=="14C"))),cex=CEX)
+
+lines(Vp_SvC_2014.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=24, bg= alpha(COL(meanse3)), cex=CEX)
+points(Vp_SvC_2014.mean~temp, subset(meanse3, GrowthTemp=="14C"),pch=24, bg= alpha(COL(subset(meanse3, GrowthTemp=="14C"))),cex=CEX)
+
+
+##axis
+axis(1, labels = T, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(4, labels = Vp, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(2,las=2, cex.axis= CEX, tck = -0.03,mgp=c(3, .5, 0), at = seq(0,260,by =40)) ##see las= 2  
+
+## add graph letter
+mtext("(a)", side=2, las=2, at=245, line=-1.5, cex= CEX)
+
+legend(10,265, legend = c(expression(paste(italic(V)["p"], " CA"[sat])),
+                          expression(paste(italic(V)["p"], " CA"[lim])), 
+                          expression(paste(italic(V)["p"], " CA+PPDK"[lim])), 
+                          expression(paste(italic(V)["pr"], " CA+PPDK"[lim])),
+                          expression(paste(italic(V)["p"], " von Caemmerer 2014"))),
+       pt.bg =  alpha(c("white"),1), pch=c(21,22,23,NA,24), lty=c(NA,NA,NA,2,NA),
+       bty = 'n', cex= 0.75, ncol=1, pt.cex=0.75)
+
+
+mtext(expression(paste(italic(V)[p]," (", mu, "mol ", m^-2, s^-2,")", sep="")),
+      side= 2, line= 2, cex= CEX)
+
+
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 2.3, cex= CEX, at =45)
+
+#CA lim gm non infinite
+plot(Vpr.mean~temp, subset(meanse3, GrowthTemp=="25C"), type="l", lty= 2, cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45), ylim= c(0,260))
+
+
+##ad error bars
+with(subset(meanse1, GrowthTemp=="25C"), arrows(temp, Vp.mean + Vp.se, temp, 
+                                                Vp.mean - Vp.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse2, GrowthTemp=="25C"), arrows(temp, Vp.mean + Vp.se, temp, 
+                                                Vp.mean - Vp.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse3, GrowthTemp=="25C"), arrows(temp, minVp.mean + minVp.se, temp, 
+                                                minVp.mean - minVp.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse3, GrowthTemp=="25C"), arrows(temp, Vp_SvC_2014.mean + Vp_SvC_2014.se, temp, 
+                                                Vp_SvC_2014.mean - Vp_SvC_2014.se,code=3,angle=90,len=0.03))
+
+lines(Vp.mean~temp, subset(meanse1, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse1)), cex=CEX)
+points(Vp.mean~temp, subset(meanse1, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="25C"))),cex=CEX)
+
+lines(Vp.mean~temp, subset(meanse2, GrowthTemp=="25C"), pch=22, bg= alpha(COL(meanse2)), cex=CEX)
+points(Vp.mean~temp, subset(meanse2, GrowthTemp=="25C"),pch=22, bg= alpha(COL(subset(meanse2, GrowthTemp=="25C"))),cex=CEX)
+
+lines(minVp.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=23, bg= alpha(COL(meanse3)), cex=CEX)
+points(minVp.mean~temp, subset(meanse3, GrowthTemp=="25C"),pch=23, bg= alpha(COL(subset(meanse3, GrowthTemp=="25C"))),cex=CEX)
+
+lines(Vp_SvC_2014.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=24, bg= alpha(COL(meanse3)), cex=CEX)
+points(Vp_SvC_2014.mean~temp, subset(meanse3, GrowthTemp=="25C"),pch=24, bg= alpha(COL(subset(meanse3, GrowthTemp=="25C"))),cex=CEX)
+
+##axis
+
+axis(1, labels = T, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(4,las=2, cex.axis=CEX, tck = -0.03,mgp=c(3, .5, 0), at = seq(0,260,by =40)) ##see las= 2  
+
+## add graph letter
+mtext("(b)", side=2, las=2, at=245, line=-1.5, cex= CEX)
+
+legend(10,265, legend = c(expression(paste(italic(V)["p"], " CA"[sat])),
+                          expression(paste(italic(V)["p"], " CA"[lim])), 
+                          expression(paste(italic(V)["p"], " CA+PPDK"[lim])), 
+                          expression(paste(italic(V)["pr"], " CA+PPDK"[lim])),
+                          expression(paste(italic(V)["p"], " von Caemmerer 2014"))),
+       pt.bg =  alpha(c("Black"),1), pch=c(21,22,23,NA,24), lty=c(NA,NA,NA,2,NA),
+       bty = 'n', cex= 0.75, ncol=1, pt.cex=0.75)
+
+#dev.off()
+
+```
+Fig. S4 g_{bs} by Growth Temp and comparison with Yin et al. (2016)
+
+```{r, Fig S4 gbs by Growth Temp and comparison with Yin 2016}
+temp <- c(10,15,20,25,30,35,40)
+tempk <- temp + 273.15
+R <- 0.008314
+tk25 <- 298.15
+
+#gbs temperature dependcy setaria Boyd 2015
+gbs25 <-  2.87*1000/92320 #mmol m-2 s-1 to micromol m-2 s-1 Pa-1 multiplied by and divided by 92350 Pa
+deltas <- 0.86
+hd <- 264.6
+Ea_gbs <- 116.77
+gbs <- gbs25*exp(Ea_gbs*((tempk-tk25)/(tk25*R*tempk)))*(1+exp((tk25*deltas-hd)/(tk25*R)))/(1+exp((tempk*deltas-hd)/(tempk*R)))
+
+plot(temp,gbs)
+#dev.off() ## make all other device off
+
+pdf(file = "submission 2019/figures/fig S6 1x1 gbs vs temp split by GrowthTemp v2.pdf", width = 4,height = 3.5 )
+
+#bottom,left, top, rigt
+par(mfrow=c(1,1),omi= c(0.7,0.8,0.1,0.1),mar=c(0,0,0,0), tcl= 0.5,#b,l,t,r
+    xpd= "NA",xaxs = "i", yaxs = "i")
+
+COL<- function(meanse3){ifelse(meanse3$GrowthTemp=="14C", "white", "black")} #codifies open symbols for 14C GrowthTemp and close symbols for 25C 
+CEX=1   ##define size of points
+
+#__________________________   Fig S4 gbs by Growth Temp and comparison with Yin 2016____________________
+plot(gbsPa.mean~temp, meanse3,bg= alpha(COL(meanse1),0.9), pch="", cex=CEX,
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(-0.01,0.25), xlim= c(5,45))
+
+lines(gbsPa.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse3)), lwd=1.5)
+lines(gbsPa.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse3)), lwd=1.5)
+lines(gbs~temp, pch=22, bg= alpha(COL(meanse3)), lwd=1.5, lty=2)
+
+
+points(gbsPa.mean~temp, subset(meanse3, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")),0.9), pch=21)
+points(gbsPa.mean~temp, subset(meanse3, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")), 0.9), pch=21)
+points(gbs~temp, pch=22, bg = "black")
+
+
+##ad error bars
+with(meanse3, arrows(temp, gbsPa.mean + gbsPa.se, temp, 
+                     gbsPa.mean - gbsPa.se,code=3,angle=90,len=0.03, lwd=1.5))
+
+##nice finishing to the plot
+axis(1, labels = T, tck = -0.03,cex.axis=CEX)
+axis(2,las=2, cex.axis=CEX, tck = -0.03,at = seq(0.0,0.2,by =0.1)) ##see las= 2 
+
+legend(10,0.25, legend = c( "25 ºC","14 ºC", "Yin et al. 2016"), pt.bg =  alpha(c( "black","white", "black"),0.8),pch = c(21,21,22),
+       bty = 'n', cex= 1.2, ncol=1, pt.cex=CEX)
+
+mtext(expression(paste(italic(g)["bs"], " (", "µmol ", m^-2, s^-1, Pa^-1,")", sep= "")),
+      side= 2, line= 2.5, cex= CEX)
+
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 2.5, cex= CEX)
+
+#dev.off()
+
+```
+Fig. S5 F_v/F_m splitted by GrowthTemp and temp
+
+```{r,  Fig S5 Fv/Fm splitted by GrowthTemp and temp}
+#__________________________   Fig S5 Fv/Fm splitted by GrowthTemp and temp____________________
+#dev.off() ## make all other device off
+
+pdf(file = "submission 2019/figures/fig S5 2x1 Fv_Fm vs temp split by GrowthTemp v2.pdf", width=3.5,height=3 )
+
+#par(mfrow=c(1,1),omi= c(0.7,0.7,0.2,0.7),mar=c(0,0,0,0), tcl= 0.5,  mgp= c(2,0,0),
+ #   xpd= "NA",xaxs = "i", yaxs = "i")
+
+par(mfrow=c(1,1),omi= c(0.8,1,0.3,0.3),mar=c(0,0,0,0), tcl= 0.5,#b,l,t,r
+    xpd= "NA",xaxs = "i", yaxs = "i")
+
+Fluor<- read.csv("rawdata/crude_data/Fluor Misc May2016.csv")
+Fluor$id <- as.character (paste(Fluor$GrowthTemp, Fluor$temp))
+
+meanse_Fv.Fm <- Fluor %>%
+  select(GrowthTemp, plant, temp, Fv.Fm, id) %>%
+  #filter (Fluor$Measurement=="Fv/Fm") %>%
+  filter (!is.na(Fv.Fm)) %>% # n is equal to 5 for all GrowthTemp temp
+  summaryBy(data = ., Fv.Fm ~ GrowthTemp + temp + plant + id ,keep.names = T, na.rm= TRUE)
+
+meanse_Fv.Fm <- meanse_Fv.Fm[!meanse_Fv.Fm$Fv.Fm < 0.65,] %>%
+  summaryBy(data = ., Fv.Fm ~ GrowthTemp + temp ,FUN = c(mean , se), keep.names = T, na.rm= TRUE)
+
+COL<- function(meanse3){ifelse(meanse3$GrowthTemp=="14C", "white", "black")} #codifies open symbols for 14C GrowthTemp and close symbols for 25C 
+CEX=1   ##define size of points
+
+#__________________________   Fig S5 Fv/Fm across temperatures ____________________
+plot(Fv.Fm.mean~temp,meanse_Fv.Fm,pch= "", ylab="", xlab="",las=2, xaxt= "n", yaxt= "n",ylim= c(0,1), xlim= c(5,45))
+
+lines(Fv.Fm.mean~temp, subset(meanse_Fv.Fm, GrowthTemp=="25C"))
+lines(Fv.Fm.mean~temp, subset(meanse_Fv.Fm, GrowthTemp=="14C"),lty=2)
+
+##ad error bars
+with(meanse_Fv.Fm, arrows(temp, Fv.Fm.mean + Fv.Fm.se, temp, 
+                          Fv.Fm.mean - Fv.Fm.se,code=3,angle=90,len=0.03))
+
+points(Fv.Fm.mean~temp, subset(meanse_Fv.Fm, GrowthTemp=="14C"),bg= alpha(COL(subset(meanse_Fv.Fm, GrowthTemp=="14C")), 0.9), pch=21, cex=CEX)
+points(Fv.Fm.mean~temp, subset(meanse_Fv.Fm, GrowthTemp=="25C"),bg= alpha(COL(subset(meanse_Fv.Fm, GrowthTemp=="25C")), 0.9), pch=21, cex=CEX)
+
+
+axis(1, labels = T, cex.axis=1.07,tck = -0.03)
+axis(2, las=2,tck = -0.03, cex.axis=1.07, at = seq(0,1,by =0.2)) ##see las= 2 
+
+##add axis labels
+mtext(expression(italic(F)[V]/italic(F)[M]),
+      side= 2, line= 3, cex = 1.3)
+
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 2.7, cex= 1.3)
+
+## add legend to the plot
+legend(20, 0.6, legend = c( "25 ºC","14 ºC"), pt.bg =  alpha(c( "black","white"),0.8), pch=21,
+       bty = 'n', cex= 1.2, ncol=1, pt.cex=CEX)
+
+#dev.off()
+
+```
+Table1. Temperature dependency of measured and modeled parameters
+
+```{r, Table1. Temperature dependency of measured and modeled parameters }
+#___________________________________      Test differences in Photo between 14C and 25C GrowthTemp  by  global fitting/ pooling using eq 17 _________________________________________________
+# Creating a subset with the relevant columns
+gm3_1 <-gm3[, c("plant","Tleaf", "T.in.K","GrowthTemp", "temp","Photo","Ci.Ca","Cond", "gmPa")] ## when T.in.K is used instead of temp it produces different parameters
+
+#gm3_1$T.in.K <- as.integer(as.character(gm3_1$temp))+273.15
+R<- 0.008317
+# ____________        Test for differences in topt   ___________________
+Topt <- ddply(gm3_1,.(plant, GrowthTemp ), summarize,
+              Photo = max(Photo))
+Topt <- merge(Topt,gm3_1) 
+t.test(Topt$Tleaf[c(Topt$GrowthTemp=="14C")],Topt$Tleaf[c(Topt$GrowthTemp=="25C")])#p-value = 0.2486
+summaryBy(.~ GrowthTemp, data=Topt, FUN = c(mean, se), na.rm =TRUE)
+# ____________      End Test for differences in topt ___________________
+
+df25<-droplevels(subset(gm3_1, GrowthTemp== "25C"))## Subseting df for GrowthTemp
+df14<-droplevels(subset(gm3_1, GrowthTemp == "14C"))
+
+#full unrestricted model, all the data is fit to the equation
+fullmodel<-nlsLM(Photo ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(Ea = 51.3, k25 = 36.44050, dS=0.626, Hd=200 ), data= gm3_1, na.action = "na.omit")
+summary(fullmodel)
+
+#Creating dummy variable for hypothesis testing
+dummy25<-ifelse(gm3_1$GrowthTemp=="25C",1,0)
+dummy14<-ifelse(gm3_1$GrowthTemp=="14C",1,0)
+
+k25_25<-mean(gm3_1$Photo[c(gm3_1$GrowthTemp=="25C" & gm3_1$temp== 25)])
+k25_14<-mean(gm3_1$Photo[c(gm3_1$GrowthTemp=="14C" & gm3_1$temp== 25)])
+
+# ____________      Test for differences in k25 ___________________
+t.test(gm3_1$Photo[c(gm3_1$GrowthTemp=="14C" & gm3_1$temp== 25)],gm3_1$Photo[c(gm3_1$GrowthTemp=="25C" & gm3_1$temp== 25)])
+#t = 0.97117, df = 12.826, p-value = 0.3494
+
+fullmodel1<-nlsLM(Photo ~ (k25_25*dummy25+ k25_14*dummy14 )*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(Ea=51.3, k25_14=37.62175,k25_25=36.44050, dS=0.626, Hd=200 ), data= gm3_1, na.action = "na.omit")
+
+summary(fullmodel1, diagnostics=TRUE)
+a<-coef(summary(fullmodel1))
+
+nlWaldtest(fullmodel1, texts= "a[2] = a[3]") #Chisq = 0.41076, df = 1, p-value = 0.5216
+nlConfint(fullmodel1, texts= a[2] = a[3],level = 0.95)
+
+#phi test for differences between k25 dnd k14
+anova(fullmodel,fullmodel1)
+
+
+# ____________      Test for differences in Ea ___________________
+# Wald and phi test for differences between Ea 25C and Ea 14C in GrowthTemp
+fullmodel2<-nlsLM(Photo ~ k25*exp ( (Ea25*dummy25+ Ea14*dummy14 )*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(Ea14=94.92685, Ea25 = 97.01351, k25=36.44050 ,dS=0.626, Hd=200 ), data= gm3_1, na.action = "na.omit")
+
+summary(fullmodel2)
+a<-coef(summary(fullmodel2))
+
+# Wald test for differences between Ea25 and Ea14
+nlWaldtest(fullmodel2, texts= "a[1] = a[2]")
+
+
+# phi test for differences between Ea  0.01169 *
+anova (fullmodel,fullmodel2)
+
+# ____________      Test for differences in dS ___________________
+fullmodel3<-nlsLM(Photo ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*(dS25*dummy25+dS14*dummy14))-Hd)/(298.15*R)))/(1+exp(((T.in.K*(dS25*dummy25+dS14*dummy14))-Hd)/(T.in.K*R)))
+                  ,start= list(Ea = 114.64134 ,  k25=36.76733 ,dS14=0.41160, dS25=0.40792,Hd=118.29129 ), data= gm3_1, na.action = "na.omit")
+
+summary(fullmodel3)
+a<-coef(summary(fullmodel3))
+
+# Wald test for differences between dS25 and dS14
+nlWaldtest(fullmodel3, texts= "a[3] = a[4]")
+nlConfint(fullmodel3, "a[3] = a[4]")
+
+# phi test for differences between dS 0.09319 .
+anova (fullmodel,fullmodel3)
+
+# ____________      Test for differences in Hd ___________________
+fullmodel4<-nlsLM(Photo ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )* (1 + exp(298.15*dS-(Hd25*dummy25 + dummy14*Hd14)/(298.15*R)) )/(1+exp( (T.in.K*dS-(Hd25*dummy25 + dummy14*Hd14)) / (T.in.K*R) ))
+                  ,start= list(Ea = 30 ,  k25=3 ,dS=0.626, Hd25=196, Hd14=196 ), data= gm3_1, na.action = "na.omit")
+
+summary(fullmodel4)
+a<-coef(summary(fullmodel4))
+
+# Wald test for differences between Ea25 and Ea14
+nlWaldtest(fullmodel4, texts= "a[4] = a[5]")
+
+# phi test for differences between dS 0.09319 .
+anova (fullmodel,fullmodel4)
+
+```
+
+Test differences in R_{Light} between 14ºC and 25ºC GrowthTemp
+
+```{r, Test differences in RLight between 14C and 25C GrowthTemp}
+rlight$T.in.K <- as.integer(as.character(rlight$temp))+273.15 ## when T.in.K is used instead of temp it produces different parameters
+
+#full unrestricted model, all the data is fit to the equation
+fullmodel<-nlsLM(rlight ~ arrh(temp,Ea, k25), start= list(Ea= 113, k25=38), data= rlight, na.action= "na.omit")
+summary(fullmodel)
+
+#Creating dummy variable for hypothesis testing
+dummy25<-ifelse(rlight$GrowthTemp=="25C",1,0)
+dummy14<-ifelse(rlight$GrowthTemp=="14C",1,0)
+
+k25_14<-mean(rlight$rlight[c(rlight$GrowthTemp=="14C" & rlight$temp== 25)])
+k25_25<-mean(rlight$rlight[c(rlight$GrowthTemp=="25C" & rlight$temp== 25)])
+
+# ____________      Test for differences in k25 ___________________
+t.test(rlight$rlight[c(rlight$GrowthTemp=="14C" & rlight$temp== 25)],rlight$rlight[c(rlight$GrowthTemp=="25C" & rlight$temp== 25)])
+#t = 2.7699, df = 14.443, p-value = 0.0147
+
+
+fullmodel1<-nlsLM(rlight ~ (k25_25*dummy25+ k25_14*dummy14 )*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )
+                  ,start= list(Ea=51.3 , k25_14=37.62175, k25_25=36.44050  ), data= rlight, na.action = "na.omit")
+
+summary(fullmodel1, diagnostics=TRUE)
+a<-coef(summary(fullmodel1))
+
+nlWaldtest(fullmodel1, texts= "a[2] = a[3]")
+
+#phi test for differences between k25 dnd k14
+anova(fullmodel,fullmodel1)
+
+
+# ____________      Test for differences in Ea ___________________
+# Wald and phi test for differences between Ea 25C and Ea 14C in GrowthTemp
+fullmodel2<-nlsLM(rlight ~ k25*exp ( (Ea25*dummy25+ Ea14*dummy14 )*(T.in.K-298.15)/(298.15*R*T.in.K) )
+                  ,start= list(Ea14=94.92685, Ea25 = 97.01351,k25=36.44050), data= rlight, na.action = "na.omit")
+
+summary(fullmodel2)
+b<-coef(summary(fullmodel2))
+
+# Wald test for differences between Ea25 and Ea14, Chisq = 30.359, df = 1, p-value = 3.59e-08
+nlWaldtest(fullmodel2, texts= "a[1] = a[2]")
+
+# phi test for differences between Ea 3.14e-07 ***
+anova (fullmodel,fullmodel2)
+
+```
+Test differences between g_{m sat} at 14ºC and 25ºC GrowthTemp
+
+```{r, Test differences between gm1 at 14C and 25C GrowthTemp, warning=FALSE }
+#______________________________      Test differences between gm1 at 14C and 25C GrowthTemp  ________________________________ 
+gm1_1 <-gm1[, c("plant","Tleaf", "T.in.K","GrowthTemp", "temp","gmPa")] ## when T.in.K is used instead of temp it produces different parameters
+
+# ____________      Test for differences in topt ___________________
+Topt1 <- ddply(gm1_1,.(plant, GrowthTemp ), summarize,
+               gmPa = max(gmPa)) #Finds the maximum gmPa
+Topt1 <- merge(Topt1,gm1_1)# Finds what is the Tleaf of the maximum gmPa
+
+t.test(Topt1$Tleaf[c(Topt1$GrowthTemp=="14C")],Topt1$Tleaf[c(Topt1$GrowthTemp=="25C")])
+summaryBy(.~ GrowthTemp, data=Topt1, FUN = c(mean, se), na.rm =TRUE)
+# ____________   End Test for differences in topt ___________________
+
+#full unrestricted model, all the data is fit to the equation
+fullmodel<-nlsLM(gmPa ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 113, dS=0.41, k25=38, Hd=120), data= gm1_1, na.action= "na.omit")
+summary(fullmodel)
+
+#Creating dummy variable for hypothesis testing
+dummy25<-ifelse(gm1_1$GrowthTemp=="25C",1,0)
+dummy14<-ifelse(gm1_1$GrowthTemp=="14C",1,0)
+
+k25_25<-mean(gm1_1$gmPa[c(gm1_1$GrowthTemp=="25C" & gm1_1$temp== 25)])
+k25_14<-mean(gm1_1$gmPa[c(gm1_1$GrowthTemp=="14C" & gm1_1$temp== 25)])
+
+# ____________      Test for differences in k25 ___________________
+t.test(gm1_1$gmPa[c(gm1_1$GrowthTemp=="14C" & gm1_1$temp== 25)],gm1_1$gmPa[c(gm1_1$GrowthTemp=="25C" & gm1_1$temp== 25)])
+#t = -0.80982, df = 9.099, p-value = 0.4387
+
+fullmodel1<-nlsLM(gmPa ~ (k25_25*dummy25+ k25_14*dummy14 )*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(Ea=51.3 ,  k25_14=37.62175,k25_25=36.44050, dS=0.626, Hd=200 ), data= gm1_1, na.action = "na.omit")
+
+summary(fullmodel1, diagnostics=TRUE)
+a<-coef(summary(fullmodel1))
+
+nlWaldtest(fullmodel1, texts= "a[2] = a[3]")
+
+#phi test for differences between k25 dnd k14
+anova(fullmodel,fullmodel1)
+
+
+# ____________      Test for differences in Ea ___________________
+# Wald and phi test for differences between Ea 25C and Ea 14C in GrowthTemp
+fullmodel2<-nlsLM(gmPa ~ k25*exp ( (Ea14*dummy14+Ea25*dummy25 )*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list( Ea14=94.92685, Ea25 = 97.01351 ,  k25=36.44050 ,dS=0.626, Hd=200 ), data= gm1_1, na.action = "na.omit")
+
+summary(fullmodel2)
+b<-coef(summary(fullmodel2))
+
+# Wald test for differences between Ea25 and Ea14
+nlWaldtest(fullmodel2, texts= "b[1] = b[2]")
+
+# phi test for differences between Ea 0.00609 **
+anova (fullmodel,fullmodel2)
+
+# ____________      Test for differences in dS ___________________
+fullmodel3<-nlsLM(gmPa ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*(dS25*dummy25+dS14*dummy14))-Hd)/(298.15*R)))/(1+exp(((T.in.K*(dS25*dummy25+dS14*dummy14))-Hd)/(T.in.K*R)))
+                  ,start= list(Ea = 97.01351 ,  k25=36.44050 ,dS14=0.626, dS25=0.626, Hd=200 ), data= gm1_1, na.action = "na.omit")
+
+summary(fullmodel3)
+a<-coef(summary(fullmodel3))
+
+# Wald test for differences between dS25 and dS14
+nlWaldtest(fullmodel3, texts= "a[3] = a[4]")
+
+# phi test for differences between dS 0.09319 .
+anova (fullmodel,fullmodel3)
+
+# ____________      Test for differences in Hd ___________________
+fullmodel4<-nlsLM(gmPa ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )* (1 + exp(298.15*dS-(Hd25*dummy25 + dummy14*Hd_14)/(298.15*R)) )/(1+exp( (T.in.K*dS-(Hd25*dummy25 + dummy14*Hd_14)) / (T.in.K*R) ))
+                  ,start= list(Ea =79,  k25=03 ,dS=0.37, Hd_14= 113 ,Hd25=113), data= gm1_1, na.action = "na.omit")
+                              
+
+summary(fullmodel4)
+b<-coef(summary(fullmodel4))
+
+
+# Wald test for differences between Ea25 and Ea14
+nlWaldtest(fullmodel4, texts= "a[4] = a[5]")
+
+# phi test for differences between dS 0.09319 .
+anova (fullmodel,fullmodel4)
+
+```
+
+Test differences between g_{m CAlim} at 14ºC and 25ºC GrowthTemp
+```{r, Test differences between gm2 at 14C and 25C GrowthTemp, warning=FALSE}
+#______________________________      Test differences between gm2 at 14C and 25C GrowthTemp    ________________________________ 
+
+gm2_1 <-gm2[, c("plant","Tleaf", "T.in.K","GrowthTemp", "temp","gmPa")] ## when T.in.K is used instead of temp it produces different parameters
+
+# ____________      Test for differences in topt ___________________
+Topt1 <- ddply(gm2_1,.(plant, GrowthTemp ), summarize,
+               gmPa = max(gmPa)) #Finds the maximum gmPa
+Topt1 <- merge(Topt1,gm2_1)# Finds what is the Tleaf of the maximum gmPa
+
+t.test(Topt1$Tleaf[c(Topt1$GrowthTemp=="14C")],Topt1$Tleaf[c(Topt1$GrowthTemp=="25C")])
+summaryBy(.~ GrowthTemp, data=Topt1, FUN = c(mean, se), na.rm =TRUE)
+# ____________   End Test for differences in topt ___________________
+
+#full unrestricted model, all the data is fit to the equation
+fullmodel<-nlsLM(gmPa ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 113, dS=0.41, k25=38, Hd=120), data= gm2_1, na.action= "na.omit")
+summary(fullmodel)
+
+#Creating dummy variable for hypothesis testing
+dummy25<-ifelse(gm2_1$GrowthTemp=="25C",1,0)
+dummy14<-ifelse(gm2_1$GrowthTemp=="14C",1,0)
+
+k25_25<-mean(gm2_1$gmPa[c(gm2_1$GrowthTemp=="25C" & gm2_1$temp== 25)])
+k25_14<-mean(gm2_1$gmPa[c(gm2_1$GrowthTemp=="14C" & gm2_1$temp== 25)])
+
+# ____________      Test for differences in k25 ___________________
+t.test(gm2_1$gmPa[c(gm2_1$GrowthTemp=="14C" & gm2_1$temp== 25)],gm2_1$gmPa[c(gm2_1$GrowthTemp=="25C" & gm2_1$temp== 25)])
+#t = -0.15688, df = 10.4, p-value = 0.8783
+
+fullmodel1<-nlsLM(gmPa ~ (k25_25*dummy25+ k25_14*dummy14 )*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(Ea=51.3 ,  k25_14=37.62175, k25_25=36.44050,dS=0.626, Hd=200 ), data= gm2_1, na.action = "na.omit")
+
+summary(fullmodel1, diagnostics=TRUE)
+a<-coef(summary(fullmodel1))
+
+nlWaldtest(fullmodel1, texts= "a[2] = a[3]")
+
+#phi test for differences between k25 dnd k14
+anova(fullmodel,fullmodel1)
+
+
+# ____________      Test for differences in Ea ___________________
+# Wald and phi test for differences between Ea 25C and Ea 14C in GrowthTemp
+fullmodel2<-nlsLM(gmPa ~ k25*exp ( (Ea25*dummy25+ Ea14*dummy14 )*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(Ea14=94.92685, Ea25 = 97.01351,k25=36.44050 ,dS=0.626, Hd=200 ), data= gm2_1, na.action = "na.omit")
+
+summary(fullmodel2)
+b<-coef(summary(fullmodel2))
+
+# Wald test for differences between Ea25 and Ea14
+nlWaldtest(fullmodel2, texts= "a[1] = a[2]")
+
+# phi test for differences between Ea 0.00609 **
+anova (fullmodel,fullmodel2)
+
+# ____________      Test for differences in dS ___________________
+fullmodel3<-nlsLM(gmPa ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*(dS25*dummy25+dS14*dummy14))-Hd)/(298.15*R)))/(1+exp(((T.in.K*(dS25*dummy25+dS14*dummy14))-Hd)/(T.in.K*R)))
+                  ,start= list(Ea = 97.01351 ,  k25=36.44050 ,dS25=0.626, dS14=0.626, Hd=200 ), data= gm2_1, na.action = "na.omit")
+
+summary(fullmodel3)
+a<-coef(summary(fullmodel3))
+
+# Wald test for differences between dS25 and dS14
+nlWaldtest(fullmodel3, texts= "a[3] = a[4]")
+
+# phi test for differences between dS 0.09319 .
+anova (fullmodel,fullmodel3)
+
+# ____________      Test for differences in Hd ___________________
+fullmodel4<-nlsLM(gmPa ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )* (1 + exp(298.15*dS-(Hd25*dummy25 + dummy14*Hgm2_14)/(298.15*R)) )/(1+exp( (T.in.K*dS-(Hd25*dummy25 + dummy14*Hgm2_14)) / (T.in.K*R) ))
+                  ,start= list(Ea = 71.71887 ,  k25=2.87333 ,dS= 0.37461, Hgm2_14=114.70166 , Hd25=114.70166  ), data= gm2_1, na.action = "na.omit")
+
+summary(fullmodel4)
+b<-coef(summary(fullmodel4))
+
+# Wald test for differences between Ea25 and Ea14
+nlWaldtest(fullmodel4, texts= "a[4] = a[5]")
+
+# phi test for differences between dS 0.09319 .
+anova (fullmodel,fullmodel4)
+
+```
+Test differences between g_{m CA + PPDKlim} at 14ºC and 25ºC GrowthTemp
+
+```{r, Test differences between gm3 at 14C and 25C GrowthTemp, warning= FALSE}
+gm3_1 <-gm3[, c("plant","Tleaf", "T.in.K","GrowthTemp", "temp","gmPa")] ## when T.in.K is used instead of temp it produces different parameters
+
+# ____________      Test for differences in topt ___________________
+Topt1 <- ddply(gm3_1,.(plant, GrowthTemp ), summarize,
+               gmPa = max(gmPa)) #Finds the maximum gmPa
+Topt1 <- merge(Topt1,gm3_1)# Finds what is the Tleaf of the maximum gmPa
+
+t.test(Topt1$Tleaf[c(Topt1$GrowthTemp=="14C")],Topt1$Tleaf[c(Topt1$GrowthTemp=="25C")])
+summaryBy(.~ GrowthTemp, data=Topt1, FUN = c(mean, se), na.rm =TRUE)
+# ____________   End Test for differences in topt ___________________
+
+#full unrestricted model, all the data is fit to the equation
+fullmodel<-nlsLM(gmPa ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 113, dS=0.41, k25=38, Hd=120), data= gm3_1, na.action= "na.omit")
+summary(fullmodel)
+
+#Creating dummy variable for hypothesis testing
+dummy25<-ifelse(gm3_1$GrowthTemp=="25C",1,0)
+dummy14<-ifelse(gm3_1$GrowthTemp=="14C",1,0)
+
+k25_25<-mean(gm3_1$gmPa[c(gm3_1$GrowthTemp=="25C" & gm3_1$temp== 25)])
+k25_14<-mean(gm3_1$gmPa[c(gm3_1$GrowthTemp=="14C" & gm3_1$temp== 25)])
+
+# ____________      Test for differences in k25 ___________________
+t.test(gm3_1$gmPa[c(gm3_1$GrowthTemp=="14C" & gm3_1$temp== 25)],gm3_1$gmPa[c(gm3_1$GrowthTemp=="25C" & gm3_1$temp== 25)])
+#t = 2.5834, df = 7.4408, p-value = 0.03445
+
+fullmodel1<-nlsLM(gmPa ~ (k25_25*dummy25+ k25_14*dummy14 )*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(Ea=51.3 ,  k25_14=37.62175, k25_25=36.44050, dS=0.626, Hd=200 ), data= gm3_1, na.action = "na.omit")
+
+summary(fullmodel1, diagnostics=TRUE)
+a<-coef(summary(fullmodel1))
+
+nlWaldtest(fullmodel1, texts= "a[2] = a[3]")
+
+#phi test for differences between k25 dnd k14
+anova(fullmodel,fullmodel1)
+
+
+# ____________      Test for differences in Ea ___________________
+# Wald and phi test for differences between Ea 25C and Ea 14C in GrowthTemp
+fullmodel2<-nlsLM(gmPa ~ k25*exp ( (Ea25*dummy25+ Ea14*dummy14 )*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(Ea14=97.9, Ea25 = 94.5  ,  k25=3.2 ,dS=0.43, Hd=130), data= gm3_1, na.action = "na.omit")
+
+summary(fullmodel2)
+b<-coef(summary(fullmodel2))
+
+# Wald test for differences between Ea25 and Ea14
+nlWaldtest(fullmodel2, texts= "a[1] = a[2]")
+
+# phi test for differences between Ea 0.00609 **
+anova (fullmodel,fullmodel2)
+
+# ____________      Test for differences in dS ___________________
+fullmodel3<-nlsLM(gmPa ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*(dS25*dummy25+dS14*dummy14))-Hd)/(298.15*R)))/(1+exp(((T.in.K*(dS25*dummy25+dS14*dummy14))-Hd)/(T.in.K*R)))
+                  ,start= list(Ea = 93.9 ,  k25=3.23 ,dS25=0.43, dS14=0.43, Hd=132 ), data= gm3_1, na.action = "na.omit")
+
+summary(fullmodel3)
+b<-coef(summary(fullmodel3))
+
+# Wald test for differences between dS25 and dS14
+nlWaldtest(fullmodel3, texts= "a[3] = a[4]")
+
+# phi test for differences between dS 0.09319 .
+anova (fullmodel,fullmodel3)
+
+# ____________      Test for differences in Hd ___________________
+fullmodel4<-nlsLM(gmPa ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )* (1 + exp(298.15*dS-(Hd25*dummy25 + dummy14*Hd_14)/(298.15*R)) )/(1+exp( (T.in.K*dS-(Hd25*dummy25 + dummy14*Hd_14)) / (T.in.K*R) ))
+                  ,start= list(Ea=9.630e+01,  k25=1.370e-14 ,dS=4.300e-01, Hd25=1.300e+02, Hd_14=1.300e+02 ), data= gm3_1, na.action = "na.omit")
+
+summary(fullmodel4)
+b<-coef(summary(fullmodel4))
+
+# Wald test for differences between Ea25 and Ea14
+nlWaldtest(fullmodel4, texts= "a[4] = a[5]")
+
+# phi test for differences between dS 0.09319 .
+anova (fullmodel,fullmodel4)
+```
+
+Statistical analysis  for Fig. 1 Photo Ci.Ca Cond 
+
+```{r, Statistical analysis  for Fig 1 Photo Ci.Ca Cond, warning=FALSE}
+gm1$temp <- as.factor(as.character(gm1$temp))
+gm2$temp <- as.factor(as.character(gm2$temp))
+gm3$temp <- as.factor(as.character(gm3$temp))
+
+#ANOVA for Assimilation
+ezDesign(data = gm3,
+        x = temp,
+        y= plant,
+        row = GrowthTemp)
+str(gm3)
+
+ezANOVA(data = gm3,
+        dv = Photo,
+        wid= .(plant),
+        within = temp,
+        between = GrowthTemp,
+        type =3)
+
+# Contrast for gm3 with lmer
+lmer_gm3_photo<- lmer(Photo ~ temp*GrowthTemp + (1|plant),data = gm3)
+summary(lmer_gm3_photo)
+
+# Extracting results from the lmer model
+posthoc<- difflsmeans(lmer_gm3_photo, test.effs = "temp:GrowthTemp" )
+
+posthoc$temp1 <- substr(as.character(row.names(posthoc)),5,6)
+posthoc$temp2 <-substr(as.character(row.names(posthoc)),28,29)
+
+#subsetting to only the comparisons between the same measured temperature
+print (posthoc <- posthoc[posthoc$temp1==posthoc$temp2,])
+
+
+
+
+#ANOVA for Ci.Ca
+ezANOVA(data = gm3,
+        dv = Ci.Ca,
+        wid= .(plant),
+        within = temp,
+        between = GrowthTemp,
+        type =3)
+
+#ANOVA for Cond
+ezANOVA(data = gm3,
+        dv = Cond,
+        wid= .(plant),
+        within = temp,
+        between = GrowthTemp,
+        type =3)
+
+```
+Statistical analysis  for Fig. 2 R_{LIGHT} and /Delta
+
+```{r, Statistical analysis  for Fig 2 rlight and Delta}
+
+#ANOVA for rlight
+ezDesign(data = avg_rlight,
+        x = temp,
+        y= plant,
+        row = GrowthTemp)
+
+rlight$temp <- as.factor(as.character(rlight$temp))
+rlight$plant <- droplevels(rlight$plant)
+avg_rlight<- summaryBy(rlight~ GrowthTemp+temp+plant, data=rlight, keep.names = T, na.rm= TRUE)
+
+
+ezANOVA(data = avg_rlight,
+        dv = rlight,
+        wid= .(plant),
+        within = temp,
+        between = GrowthTemp,
+        type =3)
+
+ezDesign(data = gm3,
+         x = temp,
+         y= plant,
+         row = GrowthTemp)
+
+
+#ANOVA for D13C
+ezANOVA(data = gm3,
+        dv = Dobs,
+        wid= .(plant),
+        within = temp,
+        between = GrowthTemp,
+        type =3)
+
+# Contrast for gm3 with lmer
+lmer_gm3_Dobs<- lmer(Dobs ~ temp*GrowthTemp + (1|plant),data = gm3)
+summary(lmer_gm3_Dobs)
+
+# Extracting results from the lmer model
+posthoc<- difflsmeans(lmer_gm3_Dobs, test.effs = "temp:GrowthTemp" )
+
+posthoc$temp1 <- substr(as.character(row.names(posthoc)),5,6)
+posthoc$temp2 <-substr(as.character(row.names(posthoc)),28,29)
+
+#subsetting to only the comparisons between the same measured temperature
+print (posthoc <- posthoc[posthoc$temp1==posthoc$temp2,])
+
+```
+Statistical analysis  for g_m
+
+```{r, Statistical analysis  for gm, warning=FALSE}
+
+#___________________      gm1  ANOVA
+ezANOVA(data = gm1,
+        dv = gmPa,
+        wid= .(plant),
+        within = temp,
+        between = GrowthTemp,
+        type =3)
+#___________________      gm2  ANOVA
+ezANOVA(data = gm2,
+        dv = gmPa,
+        wid= .(plant),
+        within = temp,
+        between = GrowthTemp,
+        type =3)
+
+#___________________      gm3  ANOVA
+ezANOVA(data = gm3,
+        dv = gmPa,
+        wid= .(plant),
+        within = temp,
+        between = GrowthTemp,
+        type =3)
+```
+Statistical analysis  for \phi
+
+```{r, Statistical analysis  for phi, warning=FALSE}
+###_____________________________  phi for sat _________________________________________
+ezANOVA(data = gm1,
+        dv = phi,
+        wid= .(plant),
+        within = .(temp),
+        between = .(GrowthTemp),
+        type =3)
+
+# Contrast for gm3 with lmer
+lmer_gm1_f<- lmer(phi ~ temp*GrowthTemp + (1|plant),data = gm1)
+
+# Extracting results from the lmer model
+posthoc<- difflsmeans(lmer_gm1_f, test.effs = "temp:GrowthTemp" )
+
+#posthoc<- difflsmeans(lmer_gm3_f)
+posthoc$temp1 <- substr(as.character(row.names(posthoc)),5,6)
+posthoc$temp2 <-substr(as.character(row.names(posthoc)),28,29)
+
+#subsetting to only the comparisons between the same measured temperature
+print (posthoc <- posthoc[posthoc$temp1==posthoc$temp2,])
+
+###_____________________________  phi for CAlim _________________________________________
+ezANOVA(data = gm2,
+        dv = phi,
+        wid= .(plant),
+        within = .(temp),
+        between = .(GrowthTemp),
+        type =3)
+
+# Post hoc test  
+lmer_gm2_f <- lmer(phi ~ temp*GrowthTemp + (1|plant),data = gm2)
+
+# Extracting results from the lmer model
+posthoc2<- difflsmeans(lmer_gm2_f, test.effs = "temp:GrowthTemp")
+
+posthoc2$temp1 <- substr(as.character(row.names(posthoc2)),5,6)
+posthoc2$temp2 <-substr(as.character(row.names(posthoc2)),28,29)
+
+#subsetting to only the comparisons between the same measured temperature
+print (posthoc2 <- posthoc2[posthoc2$temp1==posthoc2$temp2,])
+
+
+###_____________________________  CA+PPDK lim phi combined model _________________________________________
+ezANOVA(data = gm3,
+        dv = phi,
+        wid= .(plant),
+        within = .(temp),
+        between = .(GrowthTemp),
+        type =3)  
+
+
+summary(aov(data = gm3,formula = phi~temp*GrowthTemp)) 
+
+# Post hoc test
+lmer_gm3 <- lmer(phi ~ temp*GrowthTemp + (1|plant),data = gm3)
+
+lmer_gm3_f <- lmer(phi ~ temp+GrowthTemp + (1|plant),data = gm3)
+lmer_gm3_4<- lmer(phi ~ temp+ (1|plant),data = gm3)
+lmer_gm3_5<- lmer(phi ~  (1|plant),data = gm3)
+
+
+anova(lmer_gm3_f,lmer_gm3_4,lmer_gm3, lmer_gm3_5)
+
+# Extracting results from the lmer model
+posthoc3<- difflsmeans(lmer_gm2_f, test.effs = "temp:GrowthTemp")
+
+posthoc3$temp1 <- substr(as.character(row.names(posthoc3)),5,6)
+posthoc3$temp2 <-substr(as.character(row.names(posthoc3)),28,29)
+
+
+#subsetting to only the comparisons between the same measured temperature
+print (posthoc3 <- posthoc3[posthoc3$temp1==posthoc3$temp2,])
+
+###_____________________________  CA+PPDK lim phi_SvC_2014 combined model _________________________________________
+
+ezANOVA(data = gm3,
+        dv = phi_SvC_2014,
+        wid= .(plant),
+        within = .(temp),
+        between = .(GrowthTemp),
+        type =3)
+
+# Post hoc test  
+lmer_gm3_Svc <- lmer(phi_SvC_2014 ~ temp*GrowthTemp + (1|plant),data = gm3)
+
+# Extracting results from the lmer model
+posthoc4<- difflsmeans(lmer_gm3_Svc , test.effs = "temp:GrowthTemp")
+
+# Extracting results from the lmer model
+posthoc4$temp1 <- substr(as.character(row.names(posthoc4)),5,6)
+posthoc4$temp2 <-substr(as.character(row.names(posthoc4)),28,29)
+
+
+#subsetting to only the comparisons between the same measured temperature
+print (posthoc4 <- posthoc4[posthoc4$temp1==posthoc4$temp2,])
+
+```
+
+Statistical analysis  for g_{bs}
+
+```{r, Statistical analysis  for g_{bs}, warning=FALSE}
+ezANOVA(data = gm1,
+        dv = gbsPa,
+        wid= .(plant),
+        within = .(temp),
+        between = .(GrowthTemp),
+        type =3)
+
+
+#I will test the constrast with difflsmeans instead of Tukey because this test is more sensible
+# posthoc TEST using lmer 
+lmer_gbs1 <- lmer(gbsPa ~ temp*GrowthTemp + (1|plant),data = gm1)
+#Temp p40=0.03
+
+# Extracting constrasts from the lmer model
+# Extracting results from the lmer model
+posthoc5<- difflsmeans(lmer_gbs1 , test.effs = "temp:GrowthTemp")
+
+# Extracting results from the lmer model
+posthoc5$temp1 <- substr(as.character(row.names(posthoc5)),5,6)
+posthoc5$temp2 <-substr(as.character(row.names(posthoc5)),28,29)
+
+
+#subsetting to only the comparisons between the same measured temperature
+print (posthoc5 <- posthoc5[posthoc5$temp1==posthoc5$temp2,])
+
+
+
+# gm2 CAlim dataset with imputed_Data 
+ezANOVA(data = gm2,
+        dv = gbsPa,
+        wid= .(plant),
+        within = .(temp),
+        between = .(GrowthTemp),
+        type =3)
+
+#Dataset with imputed_Data CA and PPDKlim
+ezANOVA(data = gm3,
+        dv = gbsPa,
+        wid= .(plant),
+        within = .(temp),
+        between = .(GrowthTemp),
+        type =3)
+
+#I will test the constrast with difflsmeans instead of Tukey because this test is more sensible
+# posthoc TEST using lmer 
+lmer_gbs3 <- lmer(gbsPa ~ temp*GrowthTemp + (1|plant),data = gm3)
+#Temp p40=0.03
+
+# Extracting results from the lmer model
+posthoc6<- difflsmeans(lmer_gbs3 , test.effs = "temp:GrowthTemp")
+
+# Extracting results from the lmer model
+posthoc6$temp1 <- substr(as.character(row.names(posthoc6)),5,6)
+posthoc6$temp2 <-substr(as.character(row.names(posthoc6)),28,29)
+
+
+#subsetting to only the comparisons between the same measured temperature
+print (posthoc6 <- posthoc6[posthoc6$temp1==posthoc6$temp2,])
+```
+
+Statistical analysis between models phi g_{bs} and g_{m} for GrowthTemp*temp*model 
+
+```{r,  Statistical analysis between models phi gbs and gm for GrowthTemp*temp*model, warning=FALSE }
+
+#__________________________________   Statistical analysis between models phi gbs and gm for GrowthTemp*temp*model  
+
+# Test effect of gmodel on leakiness
+phi<- rbind(gm1[,c(1:4,14,34:37)], gm2[,c(1:4,10,36:39)], gm3[,c(1:4,10,86:89,97)] )#,phi_SvC_2014
+
+phi$plant <- factor(phi$plant)
+phi$method <- factor(phi$method)
+phi$temp <- factor(phi$temp)
+
+ezANOVA(data = phi,
+        dv = gmPa,
+        wid= .(plant),
+        within = .(temp,method),
+        between = .(GrowthTemp),
+        type =3)
+
+#I will test the constrast with difflsmeans instead of Tukey because this test is more sensible
+lmer_gms <- lmer(gmPa ~ temp*GrowthTemp*method + (method|plant),data = phi)# posthoc TEST using lmer 
+
+lmer_gms2 <- lmer(gmPa ~ temp*method + (method|plant),data = phi)# posthoc TEST using lmer 
+
+lmer_gms3 <-lmer(gmPa ~ temp*GrowthTemp + (method|plant),data = phi)
+
+anova(lmer_gms,lmer_gms3) # p= 0.9143, lmer_gms2,
+
+
+summary(lmer_gms)
+# Extracting constrasts from the lmer model
+
+posthoc<- difflsmeans(lmer_gms )
+options(max.print=1000000)
+posthoc<- difflsmeans(lmer_gms, test.effs = "temp:method" )
+
+#subsetting to only the comparisons between the same measured temperature
+posthoc<- posthoc$diffs.lsmeans.table
+posthoc$temp1 <- substr(as.character(row.names(posthoc)),14,15)
+posthoc$temp2 <-substr(as.character(row.names(posthoc)),24,25)
+posthoc$temp3 <-substr(as.character(row.names(posthoc)),26,27)
+posthoc$temp4 <-substr(as.character(row.names(posthoc)),28,29)
+
+
+print (posthoc2 <- posthoc[posthoc$temp1 == posthoc$temp2|posthoc$temp1 ==posthoc$temp3|posthoc$temp1 ==posthoc$temp4,])
+print (posthoc2[posthoc2$"p-value"<0.05,])
+
+
+ezANOVA(data = phi,
+        dv = phi,
+        wid= .(plant),
+        within = .(temp,method),
+        between = .(GrowthTemp),
+        type =3)
+
+ezANOVA(data = phi,
+        dv = gbsPa,
+        wid= .(plant),
+        within = .(temp,method),
+        between = .(GrowthTemp),
+        type =3)
+
+```
+Fig. S4 g_m 4 models split by GrowthTemp
+ 
+```{r, Fig. S4 gm 4 models split by GrowthTemp}
+CEX=1
+ ## make all other device off
+
+pdf(file = "submission 2019/figures/fig S4 2x1 gm 3 models split by GrowthTemp v2.pdf", width =7, height =3.5 )
+
+par(mfrow=c(1,2),omi= c(0.7,0.6,0.1,0.42),mar=c(0,0,0,0), tcl= 0.5,  mgp= c(3,0.5,0),#bltr
+    xpd= "NA",xaxs = "i", yaxs = "i")
+#_________________________________  Leakiness _________________________________________________
+plot(gmPa.mean~temp, meanse1, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45),ylim= c(0.0,7))
+
+##ad error bars
+with(subset(meanse1, GrowthTemp=="14C"), arrows(temp, gmPa.mean + gmPa.se, temp, 
+                                                gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+with(subset(meanse2, GrowthTemp=="14C"), arrows(temp, gmPa.mean + gmPa.se, temp, 
+                                                gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+with(subset(meanse3, GrowthTemp=="14C"), arrows(temp, gmPa.mean + gmPa.se, temp, 
+                                                gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+# a. 14C
+lines(gmPa.mean~temp, subset(meanse1, GrowthTemp=="14C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX)
+points(gmPa.mean~temp, subset(meanse1, GrowthTemp=="14C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(gmPa.mean~temp, subset(meanse2, GrowthTemp=="14C"), pch=22, bg= alpha(COL(meanse2),0.9), cex=CEX)
+points(gmPa.mean~temp, subset(meanse2, GrowthTemp=="14C"),pch=22, bg= alpha(COL(subset(meanse2, GrowthTemp=="14C")),0.9),cex=CEX)
+
+lines(gmPa.mean~temp, subset(meanse3, GrowthTemp=="14C"), pch=23, bg= alpha(COL(meanse3),0.9), cex=CEX)
+points(gmPa.mean~temp, subset(meanse3, GrowthTemp=="14C"),pch=23, bg= alpha(COL(subset(meanse3, GrowthTemp=="14C")),0.9),cex=CEX)
+
+axis(1, labels = T, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(4, labels = F, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(2,      las=2, tck = -0.03, mgp=c(3, .5, 0),cex.axis= CEX)#, at = seq(0.1,1,by =0.2)) ##see las= 2  
+
+## add graph letter
+mtext("(a)", side=2, las=2, at=1, line=-2.5, cex= CEX)
+
+legend(18,7, legend = c(expression(CA[sat]),
+                          expression(CA[lim]), 
+                          expression(CA+PPDK[lim]),
+       pt.bg =  alpha(c("white"),0.9), pch=c(21,22,23),
+       bty = 'n', cex= 0.75, ncol=1, pt.cex=0.75))
+
+mtext(expression(paste (gm)),
+      side= 2, line= 1.8, cex= CEX)
+
+mtext(expression(paste("Leaf temperature", " (" ^o,"C",")", sep= "")),
+      side= 1, line= 2.3, cex= CEX, at =45)
+
+#CA lim gm non infinite
+plot(gmPa.mean~temp, meanse2, type="n", cex=CEX, 
+     ylab="", xlab="",las=2, xaxt= "n", yaxt= "n", xlim= c(5,45), ylim= c(0.0,7))
+
+lines(gmPa.mean~temp, subset(meanse1, GrowthTemp=="25C"), pch=21, bg= alpha(COL(meanse1),0.9), cex=CEX)
+points(gmPa.mean~temp, subset(meanse1, GrowthTemp=="25C"),pch=21, bg= alpha(COL(subset(meanse1, GrowthTemp=="25C")),0.9),cex=CEX)
+
+lines(gmPa.mean~temp, subset(meanse2, GrowthTemp=="25C"), pch=22, bg= alpha(COL(meanse2),0.9), cex=CEX)
+points(gmPa.mean~temp, subset(meanse2, GrowthTemp=="25C"),pch=22, bg= alpha(COL(subset(meanse2, GrowthTemp=="25C")),0.9),cex=CEX)
+
+lines(gmPa.mean~temp, subset(meanse3, GrowthTemp=="25C"), pch=23, bg= alpha(COL(meanse3),0.9), cex=CEX)
+points(gmPa.mean~temp, subset(meanse3, GrowthTemp=="25C"),pch=23, bg= alpha(COL(subset(meanse3, GrowthTemp=="25C")),0.9),cex=CEX)
+
+##ad error bars
+with(subset(meanse1, GrowthTemp=="25C"), arrows(temp, gmPa.mean + gmPa.se, temp, 
+                                                gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse2, GrowthTemp=="25C"), arrows(temp, gmPa.mean + gmPa.se, temp, 
+                                                gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+
+with(subset(meanse3, GrowthTemp=="25C"), arrows(temp, gmPa.mean + gmPa.se, temp, 
+                                                gmPa.mean - gmPa.se,code=3,angle=90,len=0.03))
+
+axis(1, labels = T, tck = -0.03, mgp=c(3, .8, 0),cex.axis=CEX)
+axis(4,las=2, cex.axis=CEX, tck = -0.03,mgp=c(3, .5, 0))#, at = seq(0.1,1,by =0.2)) ##see las= 2  
+
+## add graph letter
+mtext("(b)", side=2, las=2, at=1, line=-2.5, cex= CEX)
+legend(18,1.1, legend = c(expression(CA[sat]),
+                          expression(CA[lim]), 
+                          expression(CA+PPDK[lim]),
+                          "von Caemmerer et al. (2014)"), 
+       pt.bg =  alpha(c("black"),0.9), pch=c(21,22,23,24),
+       bty = 'n', cex= 0.75, ncol=1, pt.cex=0.75)
+
+
+```
+
+Test for differences in Ea  across models and temperatures for g_m
+
+```{r, Test for differences in Ea  across models and temperatures, warning=FALSE}
+# ____________      Test for differences in Ea  across models and temperatures___________________
+R<- 0.008317
+
+#Creating dummy variable for hypothesis testing
+dummyCAsat<-ifelse(phi$method=="sat",1,0)
+dummyCAlim<-ifelse(phi$method=="CAlim",1,0)
+dummyPPDKlim<-ifelse(phi$method=="PPDKlim",1,0)
+
+phi$temp <- as.integer(as.factor(phi$temp))
+
+fullmodel<-nlsLM(gmPa ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 379, dS=1.88, k25=0.11, Hd=523), data= phi, na.action= "na.omit")
+summary(fullmodel)
+
+# Wald and phi test for differences between Ea 25C and Ea 14C in GrowthTemp
+fullmodel2<-nlsLM(gmPa ~ k25*exp ( (EaCAsat*dummyCAsat+ EaCAlim*dummyCAlim +EaPPDKlim*dummyPPDKlim )*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(EaCAsat=83, EaCAlim = 81, EaPPDKlim = 98,  k25=3.2 ,dS=0.43, Hd=130), data= phi, na.action = "na.omit")
+
+summary(fullmodel2)
+anova (fullmodel,fullmodel2)
+
+
+a<-coef(summary(fullmodel2))
+
+# Wald test for differences between CAsat and CAlim
+nlWaldtest(fullmodel2, texts= "a[1] = a[2]")
+#Wald Chi-square test of a restriction on model parameters
+
+# Wald test for differences between CAsat and ppdklim
+nlWaldtest(fullmodel2, texts= "a[1] = a[3]")
+
+
+# Wald test for differences between CAlim and ppdklim
+nlWaldtest(fullmodel2, texts= "a[2] = a[3]")
+
+# phi test for differences between Ea 0.9662
+anova (fullmodel,fullmodel2)
+
+
+phi$temp <- as.integer(as.factor(phi$temp))
+
+fullmodel<-nlsLM(gmPa ~ arrh_mod(temp,Ea,dS, k25, Hd), start= list(Ea= 379, dS=1.88, k25=0.11, Hd=523), data= phi, na.action= "na.omit")
+summary(fullmodel)
+
+#Creating dummy variable for hypothesis testing with the model splitted by model and temperature
+dummyCAsat14<-ifelse(phi$method=="sat" & phi$GrowthTemp=="14C",1,0)
+dummyCAsat25<-ifelse(phi$method=="sat" & phi$GrowthTemp=="25C",1,0)
+
+dummyCAlim14<-ifelse(phi$method=="CAlim"& phi$GrowthTemp=="14C",1,0)
+dummyCAlim25<-ifelse(phi$method=="CAlim"& phi$GrowthTemp=="25C",1,0)
+
+dummyPPDKlim14<-ifelse(phi$method=="PPDKlim" & phi$GrowthTemp=="14C",1,0)
+dummyPPDKlim25<-ifelse(phi$method=="PPDKlim" & phi$GrowthTemp=="25C",1,0)
+
+
+fullmodel3<-nlsLM(gmPa ~ k25*exp ( (EaCAsat14*dummyCAsat14 + EaCAsat25*dummyCAsat25 +
+                                   EaCAlim14*dummyCAlim14 +EaCAlim25*dummyCAlim25 +
+                                    EaPPDKlim14*dummyPPDKlim14 + EaPPDKlim25*dummyPPDKlim25 )*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(EaCAsat14=83, EaCAsat25=83, EaCAlim14 = 81, EaCAlim25 = 81, EaPPDKlim14 = 98, EaPPDKlim25 = 98,  k25=3.2 ,dS=0.43, Hd=130), data= phi, na.action = "na.omit")
+
+summary(fullmodel3)
+a<-coef(summary(fullmodel3))
+
+anova (fullmodel,fullmodel3)
+
+# Wald and phi test for differences between Ea 25C and Ea 14C in GrowthTemp
+#EaCAsat14=81.86273  vs EaCAlim14=  89.78484  
+nlWaldtest(fullmodel2, texts= "a[1] = a[3]")#Chisq = 3.4703, df = 1, p-value = 0.06248
+
+#EaCAsat14= 81.86273  vs EaPPDKlim14=  88.77352 
+nlWaldtest(fullmodel2, texts= "a[1] = a[5]")#Chisq = 20.772, df = 1, p-value = 5.173e-06
+
+#EaCAlim14= 89.78484   vs EaPPDKlim14= 88.77352
+nlWaldtest(fullmodel2, texts= "a[3] = a[5]")# Chisq = 24.239, df = 1, p-value = 8.509e-07
+
+
+#EaCAsat25 = 78.82295 vs EaCAlim25 = 83.62632  
+nlWaldtest(fullmodel2, texts= "a[2] = a[4]")#Chisq = 22.795, df = 1, p-value = 1.802e-06
+
+#EaCAsat25= 78.82295 vs EaPPDKlim25= 85.44434 
+nlWaldtest(fullmodel2, texts= "a[2] = a[6]")#Chisq = 2.0218, df = 1, p-value = 0.1551
+
+#EaCAlim25=83.62632  vs EaPPDKlim25= 85.44434 
+nlWaldtest(fullmodel2, texts= "a[4] = a[6]")#Chisq = 114.25, df = 1, p-value < 2.2e-16
+
+
+
+# Analysis of variance for deactivation term Hd
+fullmodel4<-nlsLM(gmPa ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*
+                    ( 1+exp(( (298.15*dS)- (HdCAsat14*dummyCAsat14 + HdCAsat25*dummyCAsat25 + 
+                                              HdCAlim14*dummyCAlim14 +HdCAlim25*dummyCAlim25 +   
+                                              HdPPDKlim14*dummyPPDKlim14 + HdPPDKlim25*dummyPPDKlim25))/(298.15*R)))/ (1+ exp ( ((T.in.K*dS)- (HdCAsat14*dummyCAsat14 + HdCAsat25*dummyCAsat25 +   
+                                              HdCAlim14*dummyCAlim14 +HdCAlim25*dummyCAlim25 +   
+                                              HdPPDKlim14*dummyPPDKlim14 + HdPPDKlim25*dummyPPDKlim25) )/(T.in.K*R) )),start= list(Ea=83,  k25=3.2 ,dS=0.43, HdCAsat14=130 , HdCAsat25=130, HdCAlim14=130, HdCAlim25=130, HdPPDKlim14=130, HdPPDKlim25=130), data= phi, na.action = "na.omit")
+summary(fullmodel4)
+
+
+anova (fullmodel,fullmodel4)
+
+
+# Analysis of variance for deactivation term ds
+fullmodel5<-nlsLM(gmPa ~ k25*exp ( Ea*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15* (dSCAsat14*dummyCAsat14 + dSCAsat25*dummyCAsat25 +
+                                                                                              dSCAlim14*dummyCAlim14 +dSCAlim25*dummyCAlim25 +
+                                                                                              dSPPDKlim14*dummyPPDKlim14 + dSPPDKlim25*dummyPPDKlim25))-Hd)/(298.15*R)))/(1+exp(((T.in.K* (dSCAsat14*dummyCAsat14 + dSCAsat25*dummyCAsat25 +
+                                                                                                                                                                                             dSCAlim14*dummyCAlim14 +dSCAlim25*dummyCAlim25 +
+                                                                                                                                                                                             dSPPDKlim14*dummyPPDKlim14 + dSPPDKlim25*dummyPPDKlim25))-Hd)/(T.in.K*R))),
+                  start= list(Ea= 98,  k25=3.2 ,dSCAsat14=0.43, dSCAsat25=0.43, dSCAlim14 = 0.43, dSCAlim25 = 0.43, dSPPDKlim14 = 0.43, dSPPDKlim25 = 0.43, Hd=130), data= phi, na.action = "na.omit")
+summary(fullmodel5)
+
+anova (fullmodel,fullmodel5)
+
+
+fullmodel6<-nlsLM(gmPa ~ (k25CAsat14*dummyCAsat14 + k25CAsat25*dummyCAsat25 +
+                            k25CAlim14*dummyCAlim14 +k25CAlim25*dummyCAlim25 +
+                            k25PPDKlim14*dummyPPDKlim14 + k25PPDKlim25*dummyPPDKlim25)* exp ( k25*(T.in.K-298.15)/(298.15*R*T.in.K) )*(1+exp(((298.15*dS)-Hd)/(298.15*R)))/(1+exp(((T.in.K*dS)-Hd)/(T.in.K*R)))
+                  ,start= list(k25CAsat14=3.2, k25CAsat25=3.2, k25CAlim14 = 81, k25CAlim25 = 81, k25PPDKlim14 = 98, k25PPDKlim25 = 98,  k25=3.2 ,dS=0.43, Hd=130), data= phi, na.action = "na.omit")
+
+summary(fullmodel6)
+anova (fullmodel,fullmodel6)
+
+
+```
+
