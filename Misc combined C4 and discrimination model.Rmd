@@ -1,0 +1,591 @@
+---
+title: "Cold acclimation of mesophyll conductance, bundle-sheath conductance and leakiness in Miscanthus x giganteus"
+author: "Erika A. Serrano-Romero and Asaph B. Cousins"
+date: "Tue Dec  12 2019"
+output: html_document
+---
+<br />  
+Loading required packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r, message=FALSE, warning=FALSE}
+require(rmarkdown)
+library(modelr)
+library(dplyr)
+library(purrr)
+
+```
+
+
+<br />  
+
+### CA~sat~ model
+
+Reading data set for the combined C~4~-enzyme-limited photosynthesis model and the $\Delta$^13^C discrimination model for the CA~sat~
+Measured data
+
+```{r reading measured data}
+
+d0 <- read.csv("submission 2019/deltavalues to plug in Nerea gm.csv", head = TRUE) # To load initial values
+
+```
+
+Loading initial starting values for *g*~m~ and *g*~bs~ for the CA~sat~
+
+```{r reading starting values for CAsat model}
+gbs_gm1_start_df <- read.csv("submission 2019/start_gmsat0.csv")#Loads starting values for the model
+
+gm1<- cbind(d0,gbs_gm1_start_df)#Joins input data and starting values for the model
+
+```
+Creates a list of vectors with starting values for *g*~m~ and *g*~bs~
+
+
+```{r, creating list of starting values for CAsat model}
+#
+gm1_list <- gm1 %>%
+  group_split(.tbl = ., id) # Splits dataset by Growth and measured temperature
+
+gm1_gbsPa <- gm1 %>%
+  group_split(.tbl = ., id) %>%
+  map("gbsPa") %>% map_dbl(mean) # Creates a vector with the mean values for gbs for the splitted dataset
+
+gm1_gm <- gm1 %>%
+  group_split(.tbl = ., id) %>%
+  map("gmPa") %>% map_dbl(mean) # Creates a vector with the mean values for Cm for the splitted dataset
+
+gbs_gm1_start <- mapply(c, gm1_gbsPa , gm1_gm , SIMPLIFY = FALSE) 
+
+
+
+```
+
+Combined C~4~-enzyme-limited photosynthesis and the $\Delta$^13^C discrimination for the CA~sat~ model
+
+The equations with their descriptions can be found in the Supporting Information Table S1
+
+```{r, combined model for CAsat model}
+C4_combined_model_CAsat<- function (gbs_gm,data ) {
+  
+  data$dummy25<-ifelse(data$GrowthTemp=="25C",1,0)
+  data$dummy14<-ifelse(data$GrowthTemp=="14C",1,0)
+ 
+   
+  # Variables for a
+  alpha <-  0 #Fraction of PSII active in bundle sheath cells (von Caemmerer 2000)
+  
+  #Parameters with temperature dependencies
+  temp <- data$Tleaf
+  tempk <- temp + 273.15
+  R <- 0.008314
+  tk25 <- 298.15
+  
+  Kc <- 121*exp((64.2*(tempk-tk25))/(tk25*R*tempk)) # Kc temperature dependency setaria Boyd et al. (2015)
+  uoc <- 0.047*exp( (- 1.63/R)*(1/tk25 - 1/tempk )) # uoc temperature dependency Ubierna et al. (2018)
+  Ko <- 29200*exp((10.5*(tempk-tk25))/(tk25*R*tempk)) # Ko temperature dependency setaria Boyd et al. (2015)
+ 
+  
+  data$gbsPa <- gbs_gm[1]
+  data$gmPa <- gbs_gm[2]
+  data$Cm <- data$CiPa - (data$Photo/data$gmPa)
+  
+  Om <- 210000*data$Press/1000 # µmol mol-1 O2 mol fraction in the mesophyl cells (in air at equilibrium)
+  Os <- Om + (alpha * data$Photo/(uoc*data$gbsPa))*data$Press
+  
+  #variables for "b" in the quadratic equation for the C4 enzyme limited model
+
+  #Vpmax temperature dependency setaria Boyd 2015
+  Vpmax25 <- 300.5*data$dummy14 + 491.7*data$dummy25 
+  deltas <- 0.25
+  hd <- 73.3
+  Ea_Vpmax <- 94.8
+  Vpmax <- Vpmax25*exp(Ea_Vpmax*((tempk-tk25)/(tk25*R*tempk)))*(1+exp((tk25*deltas-hd)/(tk25*R)))/(1+exp((tempk*deltas-hd)/(tempk*R)))
+
+  #Vcmax temperature dependency Yin et al., 2011
+  k25_Vcmax <- 58.3*data$dummy14 + 47.1*data$dummy25 
+  Vcmax <- k25_Vcmax*exp((53.4*(tempk-tk25))/(tk25*R*tempk))
+  
+  #Rubisco specificity setaria Boyd 2015
+  sco <- 1310*exp(-31.1*(tempk-tk25)/(tk25*R*tempk))
+  sm_gamma <- 0.5/sco #Half the reciprocal of the Rubisco specificity (von Caemmerer, 2000)
+  big_gamma <- sm_gamma*Os
+  
+  #Kp temperature dependency setaria Boyd 2015
+  kp <-  7.44 * exp((36.3 * (tempk - tk25))/(tk25 *R* tempk)) 
+  
+  Rlight <- data$Rlight
+  Rm <- .5 * data$Rlight #
+  
+  data$Vp <- (data$Cm*Vpmax)/(data$Cm+kp) 
+  
+  
+  #Quadratic coefficients to calculate A
+  a <- 1 - ((alpha*Kc)/(uoc*Ko))
+  b <- -( (data$Vp - Rm + data$gbsPa * data$Cm) + (Vcmax - Rlight) + data$gbsPa*(Kc * (1 + (Om/Ko))) + 
+            ( (alpha/uoc)*(sm_gamma *      Vcmax + Rlight * Kc/Ko))  )
+  c <- (Vcmax - Rlight)*(data$Vp - Rm + data$gbsPa*data$Cm) - (Vcmax*data$gbsPa * sm_gamma * Om + Rlight* data$gbsPa*(Kc*(1+(Om/Ko))) )
+  
+  data$Amod <- (-b - sqrt(b^2 - 4*a*c))/2*a
+  
+
+
+  #discrimination factors for D13C model
+  f<-11.6 #fractionation during photorespiration
+  a_b<- 2.9 #fractionation during difussion through the leaf boundary layer
+  a_s <- 4.4 #13C fractionation due to diffusion in air
+  a_w <- 1.8 #Summed discriminations against 13C during liquid phase diffusion and dissolution
+  a_b<- 2.9 #fractionation during difussion through the leaf boundary layer
+  s <- 1.8 #Fractionation during leakage of CO2 out of the bundle-sheath cells 
+  
+  
+  
+  data$Cbs <- data$Cm + (data$Vp - data$Photo - Rm)/ data$gbsPa # Equation 4.5 von caemmerer 2000
+  
+  
+  Vc <- (data$Cbs*Vcmax)/(data$Cbs+Kc*(1+(Os/Ko))) # Equation 4.7 von caemmerer 2000
+  Vo <- 2*big_gamma*Vc/data$Cbs# Equation 4.8 von caemmerer 2000
+  
+  
+  data$b3p<-30    # fractionation by Rubisco 
+  data$b3<-data$b3p-((data$e*Rlight + f*Vo*0.5) /Vc)
+  
+  # Net fractionation by CO2 dissolution, hydration, and PEPc activity
+  data$b4p <-  -(9.483*1000)/ (273 + data$Tleaf) + 23.89 +2.2 # data$b4' temp dependency
+  data$b4 <- data$b4p - ((data$e*Rm)/data$Vp) 
+
+  data$a_bar_Ci <- with(data = data, ( a_b*(CaPa-CL) + a_s*(CL-CiPa) ) / (CaPa-CiPa) )
+  alpha_ac <- 1 + data$a_bar_Ci /1000 
+  
+  g_ac <- data$CndCO2
+  data$t <- alpha_ac*data$E/(2*g_ac) 
+  
+  data$phi <- (data$gbsPa * (data$Cbs - data$Cm)) / data$Vp
+  
+  data$D13C_mod <- with( data = data, 1/(1-t) * ( a_b*(CaPa-CL)/CaPa + a_s*(CL-CiPa)/CaPa) + 
+    (1+t)/(1-t) * ( a_w *(CiPa - Cm)/CaPa + (data$b4 + phi*(data$b3* Cbs/(Cbs - Cm)- s)) * Cm / ((1 + (phi*Cm)/(Cbs - Cm))*CaPa ) ))
+
+  return(data)
+  
+  }
+```
+Measuring distance between observed and modeled values
+```{r, measure distance for CAsat model}
+measure_distance <- function(gbs_gm,data) { 
+  diff_A <- data$Photo - C4_combined_model_CAsat(gbs_gm, data)$Amod 
+  diff_D13C <- data$Dobs - C4_combined_model_CAsat(gbs_gm, data)$D13C_mod
+  sum((diff_A/data$Photo)^2, (diff_D13C/data$Dobs)^2)
+}
+
+```
+Writing the dataset with the results for the CA~sat~ model created using the optim function
+
+```{r, gmSat0 results, warning = FALSE}
+
+results_gmsat0 <- map2_df(.x = gbs_gm1_start, 
+                                .y = gm1_list,
+                                .f = ~ data.frame (C4_combined_model_CAsat(gbs_gm = Reduce(cbind, 
+                                                  optim(.x, measure_distance, data =.y)$par), data =.y),
+                                                  Sum.diff = optim(.x, measure_distance, data = .y)$value) )  
+
+write.csv(results_gmsat0, "submission 2019/results_gmsat0.csv", row.names = FALSE)
+
+```
+<br />  
+
+
+
+
+
+
+### CA~lim~ model
+Reading data set for the ombined C~4~-enzyme-limited photosynthesis model and the $\Delta$^13^C discrimination model for the CA~lim~
+
+Loading initial starting values for *g*~m~ and *g*~bs~ for the CA~lim~
+
+```{r reading starting values for CAlim model}
+gbs_gm2_start_df <- read.csv( "submission 2019/start_gmCAlim0.csv")# Loads starting values for the model
+
+gm2<- cbind(d0,gbs_gm2_start_df)# Joins input data and starting values for the model
+
+```
+Creates a list of vectors with starting values for g~m~ and g~bs~
+
+
+```{r, creating list of starting values CAlim model}
+gm2_list <- gm2 %>%
+  group_split(.tbl = ., id) # Splits dataset by Growth and measured temperature
+
+gm2_gbsPa <- gm2 %>%
+  group_split(.tbl = ., id) %>%
+  map("gbsPa") %>% map_dbl(mean) # Creates a vector with the mean values for gbs for the splitted dataset
+
+gm2_gm <- gm2 %>%
+  group_split(.tbl = ., id) %>%
+  map("gmPa") %>% map_dbl(mean) # Creates a vector with the mean values for Cm for the splitted dataset
+
+gbs_gm2_start <- mapply(c, gm2_gbsPa , gm2_gm , SIMPLIFY = FALSE) #Creates a list of vectors with paired values of gbs and Cm
+
+
+```
+
+Combined C~4~-enzyme-limited photosynthesis and the $\Delta$^13^C discrimination for the CA~lim~ model
+
+The equations with their descriptions can be found in the Supporting Information Table S1
+
+```{r, combined model CAlim model}
+
+
+C4_combined_model_CAlim<- function (gbs_gm,data ) {
+  
+  data$dummy25<-ifelse(data$GrowthTemp=="25C",1,0)
+  data$dummy14<-ifelse(data$GrowthTemp=="14C",1,0)
+  
+  # Variables for a
+  alpha <-  0 
+  
+  #Parameters with temperature dependencies
+  temp <- data$Tleaf
+  tempk <- temp + 273.15
+  R <- 0.008314
+  tk25 <- 298.15
+  
+  Kc <- 121*exp((64.2*(tempk-tk25))/(tk25*R*tempk)) 
+  uoc <- 0.047*exp( (- 1.63/R)*(1/tk25 - 1/tempk )) 
+  Ko <- 29200*exp((10.5*(tempk-tk25))/(tk25*R*tempk)) 
+  
+  data$gbsPa <- gbs_gm[1]
+  data$gmPa <- gbs_gm[2]
+  data$Cm <- data$CiPa - data$Photo / data$gmPa
+  
+  Om <- 210000*data$Press/1000 
+  Os <- Om + (alpha * data$Photo/(uoc*data$gbsPa))*data$Press
+  
+  #variables for "b" in the quadratic equation for the C4 enzyme limited model
+  
+  #Vpmax temperature dependcy setaria Boyd 2015
+  Vpmax25 <- 300.5*data$dummy14 + 491.7*data$dummy25 
+  deltas <- 0.25
+  hd <- 73.3
+  Ea_Vpmax <- 94.8
+  Vpmax <- Vpmax25*exp(Ea_Vpmax*((tempk-tk25)/(tk25*R*tempk)))*
+           (1+exp((tk25*deltas-hd)/(tk25*R)))/(1+exp((tempk*deltas-hd)/(tempk*R)))
+  
+  #Vcmax temperature dependency Yin et al., 2011
+  k25_Vcmax <- 58.3*data$dummy14 + 47.1*data$dummy25 
+  Vcmax <- k25_Vcmax*exp((53.4*(tempk-tk25))/(tk25*R*tempk))
+  
+  #Rubisco specificity setaria Boyd 2015
+  sco <- 1310*exp(-31.1*(tempk-tk25)/(tk25*R*tempk))
+  sm_gamma <- 0.5/sco #Half the reciprocal of the Rubisco specificity von Caemmerer, (2000)
+  big_gamma <- sm_gamma*Os
+  
+  #Kp temperature dependency setaria Boyd 2015
+  kp <-  30 * exp((27.2 * (tempk - tk25))/(tk25 *R* tempk))
+  
+         
+  Rlight <- data$Rlight
+  Rm <- .5 * data$Rlight 
+  
+  
+  
+  #kca temperature dependency setaria Boyd 2015
+  k25 <- 23.2*data$dummy14 + 39.8*data$dummy25 
+  Ea <- 40.9
+  deltas <- 0.21
+  hd <- 64.5
+  kca <- k25*exp(Ea*(tempk-tk25)/(tk25*R*tempk))*
+                ((1+exp((tk25*deltas-hd)/(tk25*R)))/(1+exp((tempk*deltas-hd)/(tempk*R)))) 
+  
+  Vh <- data$Cm*kca
+  
+  KH <- 2.9799*exp(-2400*((1/tempk)-(1/298.15)))
+  
+  Kf <- 0.0389858 * exp((74.8936*(  tempk-298.15))/(298.15*0.008314*tempk))
+  Kr <- 0.00332955 * exp((65.2704*(  tempk-298.15))/(298.15*0.008314*tempk))
+  
+  CO2 <- data$Cm/KH
+    
+  x <- Kr/Kf*(Vh/CO2)
+  y <- Vpmax-Vh + kp * Kr/Kf *(Vh/CO2)
+  z <- -Vh*kp
+  
+    
+  HCO3 <- (-y + sqrt(y^2 - 4*x*z))/(2*x)
+  
+  data$Vp <- (HCO3*Vpmax)/(HCO3+kp) 
+  
+  #Quadratic coefficients to calculate A
+  a <- 1 - ((alpha*Kc)/(uoc*Ko))
+  b <- -( (data$Vp - Rm + data$gbsPa * data$Cm) + (Vcmax - Rlight) + data$gbsPa*(Kc * (1 + (Om/Ko))) + 
+            ( (alpha/uoc)*(sm_gamma *Vcmax + Rlight * Kc/Ko))  )
+  c <- (Vcmax - Rlight)*(data$Vp - Rm + data$gbsPa*data$Cm) - 
+       (Vcmax*data$gbsPa * sm_gamma * Om + Rlight* data$gbsPa*(Kc*(1+(Om/Ko))) )
+  
+  data$Amod <- (-b - sqrt(b^2 - 4*a*c))/2*a
+  
+  
+  #discrimination factors for D13C model
+  f<-11.6 #fractionation during photorespiration
+  a_b<- 2.9 #fractionation during difussion through the leaf boundary layer
+  a_s <- 4.4 #13C fractionation due to diffusion in air
+  a_w <- 1.8 #Summed discriminations against 13C during liquid phase diffusion and dissolution
+  a_b<- 2.9 #fractionation during difussion through the leaf boundary layer
+  s <- 1.8 #Fractionation during leakage of CO2 out of the bundle-sheath cells 
+  
+  
+  data$Cbs <- data$Cm + (data$Vp - data$Photo - Rm)/ data$gbsPa # Equation 4.5 von caemmerer 2000
+  
+ 
+  Vc <- (data$Cbs*Vcmax)/(data$Cbs+Kc*(1+(Os/Ko))) # Equation 4.7 von caemmerer 2000
+  Vo <- 2*big_gamma*Vc/data$Cbs# Equation 4.8 von caemmerer 2000
+  
+  
+  
+  data$b3p <- 30    # fractionation by Rubisco 
+  data$b3<-data$b3p-((data$e*Rlight + f*Vo*0.5) /Vc)
+  
+  # Net fractionation by CO2 dissolution, hydration, and PEPc activity
+  data$b4p <-  -(9.483*1000)/ (273 + data$Tleaf) + 23.89 +2.2 #data$b4' temp dependency
+  data$b4 <- data$b4p*(1-data$Vp/Vh)+ (1.1+1.1)*data$Vp/Vh - ((data$e*Rm)/data$Vp)
+  
+  
+  data$a_bar_Ci <- with(data = data, ( a_b*(CaPa-CL) + a_s*(CL-CiPa) ) / (CaPa-CiPa) )
+  alpha_ac <- 1 + data$a_bar_Ci /1000 
+  
+  g_ac <- data$CndCO2
+  data$t <- alpha_ac*data$E/(2*g_ac) 
+  
+  data$phi <- (data$gbsPa * (data$Cbs - data$Cm)) / data$Vp
+  
+  data$D13C_mod <- with( data = data, 1/(1-t) * ( a_b*(CaPa-CL)/CaPa + a_s*(CL-CiPa)/CaPa) + 
+                           (1+t)/(1-t) * ( a_w *(CiPa - Cm)/CaPa + 
+                                             (data$b4 + phi*(data$b3* Cbs/(Cbs - Cm)- s)) * Cm / ((1 + (phi*Cm)/(Cbs - Cm))*CaPa ) ))
+  
+  return(data)
+  
+}
+```
+
+Measuring distance between observed and modeled values
+```{r, measure distance CAlim model}
+
+measure_distance2 <- function(gbs_gm,data) { 
+  diff_A <- data$Photo - C4_combined_model_CAlim(gbs_gm, data)$Amod 
+  diff_D13C <- data$Dobs - C4_combined_model_CAlim(gbs_gm, data)$D13C_mod
+  sum((diff_A/data$Photo)^2, (diff_D13C/data$Dobs)^2)
+}
+
+```
+Writing the dataset with the results for the CA~sat~ model created using the optim function
+
+```{r, gmCAlim results, warning = FALSE}
+
+results_gmCAlim<- map2_df(.x = gbs_gm2_start,
+                         .y = gm2_list,
+                         .f = ~ data.frame (C4_combined_model_CAlim(gbs_gm = Reduce(cbind, 
+                                              optim(.x, measure_distance2, data = .y)$par),data =.y),
+                                                Sum.diff = optim(.x, measure_distance2, data = .y)$value) )
+
+write.csv(results_gmCAlim, "submission 2019/results_gmCAlim.csv", row.names = FALSE)
+
+```
+<br />  
+
+
+
+#### CA~lim+PPDK~ model
+Reading data set for the ombined C~4~-enzyme-limited photosynthesis model and the $\Delta$^13^C discrimination model for the CA~lim+PPDK~ 
+
+```{r reading data set for CA~lim+PPDK~ model}
+
+gbs_gm3_start_df <- read.csv("submission 2019/start_gmPPDKlim0.csv")#Loads starting values for the model
+
+gm3<- cbind(d0,gbs_gm3_start_df)#Joins input data and starting values for the model
+
+```
+Creates a list of vectors with starting values for g~m~ and g~bs~ for the CA~lim+PPDK~ model 
+
+
+```{r, creating list of starting values for CA~lim+PPDK~ model}
+gm3_list <- gm3 %>%
+  group_split(.tbl = ., id) # Splits dataset by Growth and measured temperature
+
+
+gm3_gbsPa <- gm3 %>%
+  group_split(.tbl = ., id) %>%
+  map("gbsPa") %>% map_dbl(mean) # Creates a vector with the mean values for gbs for the splitted dataset
+
+gm3_gm <- gm3 %>%
+  group_split(.tbl = ., id) %>%
+  map("gmPa") %>% map_dbl(mean) # Creates a vector with the mean values for Cm for the splitted dataset
+
+gbs_gm3_start <- mapply(c, gm3_gbsPa , gm3_gm , SIMPLIFY = FALSE) #Creates a list of vectors with paired values of gbs and Cm
+
+
+```
+
+Combined C~4~-enzyme-limited photosynthesis and the $\Delta$^13^C discrimination for the CA~lim+PPDK~ model 
+
+The equations with their descriptions can be found in the Supporting Information Table S1
+
+```{r, combined model CA~lim+PPDK~ model}
+C4_combined_model_CAPPDKlim<- function (gbs_gm,data ) {
+  
+  data$dummy25<-ifelse(data$GrowthTemp=="25C",1,0)
+  data$dummy14<-ifelse(data$GrowthTemp=="14C",1,0)
+  
+  # Variables for a
+  alpha <-  0 
+  
+  #Parameters with temperature dependencies
+  temp <- data$Tleaf
+  tempk <- temp + 273.15
+  R <- 0.008314
+  tk25 <- 298.15
+  
+  Kc <- 121*exp((64.2*(tempk-tk25))/(tk25*R*tempk)) 
+  uoc <- 0.047*exp( (- 1.63/R)*(1/tk25 - 1/tempk )) 
+  Ko <- 29200*exp((10.5*(tempk-tk25))/(tk25*R*tempk)) 
+  
+  data$gbsPa <- gbs_gm[1]
+  data$gmPa <- gbs_gm[2]
+  data$Cm <- data$CiPa - data$Photo / data$gmPa
+  
+  Om <- 210000*data$Press/1000 
+  Os <- Om + (alpha * data$Photo/(uoc*data$gbsPa))*data$Press
+  
+  #variables for "b" in the quadratic equation for the C4 enzyme limited model
+  
+  #Vpmax temperature dependcy setaria Boyd 2015
+  Vpmax25 <- 300.5*data$dummy14 + 491.7*data$dummy25 
+  deltas <- 0.25
+  hd <- 73.3
+  Ea_Vpmax <- 94.8
+  Vpmax <- Vpmax25*exp(Ea_Vpmax*((tempk-tk25)/(tk25*R*tempk)))*
+           (1+exp((tk25*deltas-hd)/(tk25*R)))/(1+exp((tempk*deltas-hd)/(tempk*R)))
+  
+  #Vcmax temperature dependency setaria Yin et al., 2011
+  k25_Vcmax <- 58.3*data$dummy14 + 47.1*data$dummy25 
+  Vcmax <- k25_Vcmax*exp((53.4*(tempk-tk25))/(tk25*R*tempk))
+  
+  # PPDK temperature dependency setaria Boyd et al (2015)
+  k25_VPPDKmax <- 58.1*data$dummy14 + 47.2*data$dummy25 
+  data$Vpr <- k25_VPPDKmax*exp((56.7*(tempk-tk25))/(tk25*R*tempk))
+  
+                  
+  #Rubisco specificity setaria Boyd 2015
+  sco <- 1310*exp(-31.1*(tempk-tk25)/(tk25*R*tempk))
+  sm_gamma <- 0.5/sco #Half the reciprocal of the Rubisco specificity (von Caemmerer, 2000)
+  big_gamma <- sm_gamma*Os
+  
+  #Kp temperature dependency setaria Boyd 2015
+  kp <-  30 * exp((27.2 * (tempk - tk25))/(tk25 *R* tempk)) 
+  
+  
+  Rlight <- data$Rlight
+  Rm <- .5 * data$Rlight
+
+  
+  #kca temperature dependency setaria Boyd 2015
+  k25 <- 23.2*data$dummy14 + 39.8*data$dummy25 
+  Ea <- 40.9
+  deltas <- 0.21
+  hd <- 64.5
+  kca <- k25*exp(Ea*(tempk-tk25)/(tk25*R*tempk))*
+                ((1+exp((tk25*deltas-hd)/(tk25*R)))/(1+exp((tempk*deltas-hd)/(tempk*R)) )) 
+  
+  Vh <- data$Cm*kca
+  
+  KH <- 2.9799*exp(-2400*((1/tempk)-(1/298.15)))
+  
+  Kf <- 0.0389858 * exp((74.8936*(  tempk-298.15))/(298.15*0.008314*tempk))
+  Kr <- 0.00332955 * exp((65.2704*(  tempk-298.15))/(298.15*0.008314*tempk))
+  
+  CO2 <- data$Cm/KH
+  
+  x <- Kr/Kf*(Vh/CO2)
+  y <- Vpmax-Vh + kp * Kr/Kf *(Vh/CO2)
+  z <- -Vh*kp
+  
+  
+  HCO3 <- (-y + sqrt(y^2 - 4*x*z))/(2*x)
+  
+  
+  data$Vp_app <- (HCO3*Vpmax)/(HCO3+kp)
+  
+  data$Vp <- min(data$Vp_app, data$Vpr) 
+  
+  #Quadratic coefficients to calculate A
+  a <- 1 - ((alpha*Kc)/(uoc*Ko))
+  b <- -( (data$Vp - Rm + data$gbsPa * data$Cm) + (Vcmax - Rlight) + data$gbsPa*(Kc * (1 + (Om/Ko))) + 
+            ( (alpha/uoc)*(sm_gamma * Vcmax + Rlight * Kc/Ko))  )
+  c <- (Vcmax - Rlight)*(data$Vp - Rm + data$gbsPa*data$Cm) - 
+       (Vcmax*data$gbsPa * sm_gamma * Om + Rlight* data$gbsPa*(Kc*(1+ (Om/Ko))) )
+  
+  data$Amod <- (-b - sqrt(b^2 - 4*a*c))/2*a
+  
+  
+   #discrimination factors for D13C model
+  f<-11.6 #fractionation during photorespiration
+  a_b<- 2.9 #fractionation during difussion through the leaf boundary layer
+  a_s <- 4.4 #13C fractionation due to diffusion in air
+  a_w <- 1.8 #Summed discriminations against 13C during liquid phase diffusion and dissolution
+  a_b<- 2.9 #fractionation during difussion through the leaf boundary layer
+  s <- 1.8 #Fractionation during leakage of CO2 out of the bundle-sheath cells 
+  
+  data$Cbs <- data$Cm + (data$Vp - data$Photo - Rm)/ data$gbsPa # Equation 4.5 von caemmerer
+  
+ 
+  Vc <- (data$Cbs*Vcmax)/(data$Cbs+Kc*(1+(Os/Ko))) # Equation 4.7 von caemmerer
+  Vo <- 2*big_gamma*Vc/data$Cbs# Equation 4.8 sussane von caemmerer
+  
+  
+  
+  data$b3p<-30    # fractionation by Rubisco 
+  data$b3<-data$b3p-((data$e*Rlight + f*Vo*0.5) /Vc)
+  
+  # Net fractionation by CO2 dissolution, hydration, and PEPc activity
+  data$b4p <-  -(9.483*1000)/ (273 + data$Tleaf) + 23.89 +2.2 #data$b4' temp dependency
+  data$b4 <- data$b4p*(1-data$Vp/Vh)+ (1.1+1.1)*data$Vp/Vh - ((data$e*Rm)/data$Vp)
+  
+  
+  data$a_bar_Ci <- with(data = data, ( a_b*(CaPa-CL) + a_s*(CL-CiPa) ) / (CaPa-CiPa) )
+  alpha_ac <- 1 + data$a_bar_Ci /1000 
+  
+  g_ac <- data$CndCO2
+  data$t <- alpha_ac*data$E/(2*g_ac)
+  
+  data$phi <- (data$gbsPa * (data$Cbs - data$Cm)) / data$Vp
+  
+  data$D13C_mod <- with( data = data, 1/(1-t) * ( a_b*(CaPa-CL)/CaPa + a_s*(CL-CiPa)/CaPa) + 
+                           (1+t)/(1-t) * ( a_w *(CiPa - Cm)/CaPa + (data$b4 + phi*(data$b3* Cbs/(Cbs - Cm)- s)) * Cm / ((1 + (phi*Cm)/(Cbs - Cm))*CaPa ) ))
+  
+  return(data)
+  
+}
+```
+Measuring distance between observed and modeled values
+```{r, measure distance CA~lim+PPDK~ model}
+
+measure_distance3 <- function(gbs_gm,data) { 
+  diff_A <- data$Photo - C4_combined_model_CAPPDKlim(gbs_gm, data)$Amod 
+  diff_D13C <- data$Dobs - C4_combined_model_CAPPDKlim(gbs_gm, data)$D13C_mod
+  sum((diff_A/data$Photo)^2, (diff_D13C/data$Dobs)^2)
+}
+
+```
+Writing the dataset with the results for the CA~lim+PPDK~ model created using the optim function
+
+```{r, gmCA_PPDKlim results, warning = FALSE}
+
+results_gmCA_PPDKlim<- map2_df(.x = gbs_gm3_start,
+                         .y = gm3_list,
+                         .f = ~ data.frame (C4_combined_model_CAPPDKlim(gbs_gm = Reduce(cbind, 
+                                            optim(.x, measure_distance3, data = .y)$par), data =.y),
+                                            Sum.diff = optim(.x, measure_distance3, data = .y)$value) )
+
+write.csv(results_gmCA_PPDKlim, "submission 2019/results_gmCA_PPDKlim.csv", row.names = FALSE)
+
+```
+<br />  
