@@ -10,7 +10,7 @@ Input files
      
      c) starting values for gbsPa and gm for CA+PPDKlim model "start_gmCAlim0.csv"
      
-  3)Script for the combined enzyme and discrimination limited model
+  3)Script for the combined enzyme and discrimination limited model in markdown and html format
   
   4)Script for Figures and Statistical Analysis: 
   
