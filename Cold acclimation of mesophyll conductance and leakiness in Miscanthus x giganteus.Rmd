@@ -1,5 +1,5 @@
 ---
-title: "Cold acclimation of mesophyll conductance and leakiness in Miscanthus x giganteus"
+title: " Figs. and  stats. Cold acclimation of mesophyll conductance and leakiness in Miscanthus x giganteus"
 author: "Erika Serrano"
 date: "12/20/2019"
 output: html_document
